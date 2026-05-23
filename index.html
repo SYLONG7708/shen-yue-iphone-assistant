@@ -1,0 +1,231 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#071018">
+  <meta name="apple-mobile-web-app-title" content="申悅車機助手">
+  <meta name="description" content="申悅車機助手，提供車載安卓機教學、保固紀錄、LINE聯絡、電話與導航到店。">
+  <title>申悅車機助手</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="app-logo.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="#home" aria-label="申悅車機助手">
+      <span><img src="app-logo.png" alt=""></span>
+      <strong>申悅車機助手</strong>
+    </a>
+    <div class="header-actions">
+      <a href="https://line.me/R/ti/p/7708LUNG" target="_blank" rel="noopener">LINE</a>
+      <a href="tel:0970117708">電話</a>
+      <button type="button" data-install hidden>安裝</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="home">
+      <img src="sy-product-icons.png" alt="申悅產品服務圖標">
+      <div class="hero-glow"></div>
+      <div class="hero-content">
+        <p>Shen Yue Android Car Assistant</p>
+        <h1 data-content="heroTitle">車機教學、保固資料、售後聯絡。</h1>
+        <div class="hero-actions">
+          <button type="button" data-tab-target="tutorials">影片教學</button>
+          <button type="button" data-tab-target="warranty">保固紀錄</button>
+          <button type="button" data-tab-target="contact">聯絡申悅</button>
+        </div>
+      </div>
+    </section>
+
+    <nav class="tab-bar" aria-label="申悅車機助手分頁">
+      <button type="button" class="active" data-tab-target="dashboard">首頁</button>
+      <button type="button" data-tab-target="services">服務</button>
+      <button type="button" data-tab-target="tutorials">教學</button>
+      <button type="button" data-tab-target="warranty">保固</button>
+      <button type="button" data-tab-target="delivery">交車</button>
+      <button type="button" data-tab-target="contact">聯絡</button>
+    </nav>
+
+    <section class="tab-panel active" id="dashboard" data-tab-panel>
+      <div class="panel-head">
+        <p>Command Center</p>
+        <h2>申悅車機服務中控台</h2>
+      </div>
+      <div class="dashboard-grid">
+        <a href="https://maps.app.goo.gl/8uMB3FifXCyVE3s59" target="_blank" rel="noopener">Google Maps</a>
+        <a href="https://www.youtube.com/@shenyue6916" target="_blank" rel="noopener">YouTube 頻道</a>
+        <a href="https://www.facebook.com/cccc7708" target="_blank" rel="noopener">Facebook</a>
+        <a href="https://www.shen-yue.com.tw/" target="_blank" rel="noopener">申悅官網</a>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="services" data-tab-panel>
+      <div class="panel-head">
+        <p>Services</p>
+        <h2>申悅服務型錄</h2>
+      </div>
+      <div class="service-grid" data-service-grid></div>
+    </section>
+
+    <section class="tab-panel" id="tutorials" data-tab-panel>
+      <div class="panel-head">
+        <p>Guide</p>
+        <h2>安卓機影片教學</h2>
+      </div>
+      <div class="video-tools">
+        <input type="search" data-video-search placeholder="搜尋教學：CarPlay、藍芽、亮度、倒車、方向盤">
+        <div class="video-filters" role="group" aria-label="影片分類">
+          <button type="button" class="active" data-video-filter="all">全部</button>
+          <button type="button" data-video-filter="介面">介面</button>
+          <button type="button" data-video-filter="連線">連線</button>
+          <button type="button" data-video-filter="導航">導航</button>
+          <button type="button" data-video-filter="影音">影音</button>
+          <button type="button" data-video-filter="設定">設定</button>
+          <button type="button" data-video-filter="故障排除">故障排除</button>
+        </div>
+      </div>
+      <div class="video-grid" data-video-grid></div>
+    </section>
+
+    <section class="tab-panel" id="warranty" data-tab-panel>
+      <div class="panel-head warranty-head">
+        <p>Warranty</p>
+        <h2>保固資料登錄</h2>
+        <span>車主姓名、聯繫電話、車牌號碼為必填，其餘欄位可不填。</span>
+      </div>
+      <form class="record-form" data-record-form>
+        <label>車主姓名<input name="owner" type="text" placeholder="王先生" autocomplete="name" required></label>
+        <label>聯繫電話<input name="phone" type="tel" placeholder="09xx-xxx-xxx" autocomplete="tel" required></label>
+        <label>主機規格
+          <select name="model">
+            <option value="">不填寫主機規格</option>
+            <option>SY-C4( 四核 2g+32g)</option>
+            <option>SY-B8 (八核 2g+32g)</option>
+            <option>SY-B8 +(八核 2g+64g)</option>
+            <option>SY-A8  (八核4g+32g)</option>
+            <option>SY-K8 (八核 8g+128g)</option>
+            <option>SY-X8 (八核8g+256g)</option>
+            <option>SY-Z13 (八核8g+256g)（13吋）</option>
+            <option disabled>環景專區----------------------------------</option>
+            <option>SY-A8-V (八核4g+32g)(環景）</option>
+            <option>SY-K8-V  (八核8g+128g)(環景）</option>
+            <option>SY-X8-V  (八核 8g+256g)(環景）</option>
+            <option>SY-Z13-V( 八核8g+256g)(13吋環景）</option>
+          </select>
+        </label>
+        <label>車牌號碼<input name="plate" type="text" placeholder="ABC-1234" required></label>
+        <label>車款(年分)<input name="car" type="text" placeholder="例如：Toyota RAV4 2023"></label>
+        <label>其他產品類別(自行輸入)<input name="otherProduct" type="text" placeholder="自行輸入"></label>
+        <label>總收款金額<input name="totalAmount" type="number" inputmode="numeric" min="0" step="1" placeholder="例如：35000"></label>
+        <label>安裝日期<input name="installDate" type="date"></label>
+        <label>保固到期日<input name="warrantyDate" type="date"></label>
+        <label class="record-note">備註<textarea name="note" placeholder="補充施工細節、主機序號、保固範圍或特殊狀況"></textarea></label>
+        <button class="secondary-button" type="submit" data-save-upload-warranty>儲存上傳</button>
+        <button class="secondary-button copy-button" type="button" data-copy-warranty>複製保固資訊</button>
+      </form>
+      <article class="record-card" data-record-card>
+        <h3>目前沒有儲存紀錄</h3>
+        <p>輸入後會保存在目前裝置，並自動上傳到申悅雲端。</p>
+      </article>
+      <article class="upload-preview">
+        <div class="upload-preview-head">
+          <h3>上傳試算表內容預覽</h3>
+          <p>送出後會依下方欄位橫向寫入 Google 試算表。</p>
+        </div>
+        <div class="upload-preview-scroll" data-upload-preview></div>
+      </article>
+      <div class="cloud-actions">
+        <button class="secondary-button" type="button" data-clear-warranty>清除保固資料</button>
+        <p data-cloud-status>已設定申悅雲端網址，保固資料會自動上傳。</p>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="delivery" data-tab-panel>
+      <div class="panel-head">
+        <p>Checklist</p>
+        <h2>交車檢查表</h2>
+      </div>
+      <div class="checklist" data-checklist>
+        <label><input type="checkbox"> 藍牙通話測試完成</label>
+        <label><input type="checkbox"> 音樂播放測試完成</label>
+        <label><input type="checkbox"> 導航定位測試完成</label>
+        <label><input type="checkbox"> 倒車顯影測試完成</label>
+        <label><input type="checkbox"> 方向盤控制測試完成</label>
+        <label><input type="checkbox"> 行車記錄器錄影測試完成</label>
+        <label><input type="checkbox"> 客戶已知道重開機方式</label>
+        <label><input type="checkbox"> 客戶已加入 LINE 售後服務</label>
+      </div>
+      <button class="secondary-button" type="button" data-reset-checklist>重設檢查表</button>
+    </section>
+
+    <section class="tab-panel" id="admin" data-tab-panel>
+      <div class="panel-head">
+        <p>Admin</p>
+        <h2>管理員設定</h2>
+      </div>
+      <div class="admin-lock" data-admin-lock>
+        <label>管理 PIN<input type="password" data-admin-pin placeholder="預設 7708"></label>
+        <button type="button" data-admin-login>進入管理模式</button>
+        <p>管理模式可設定雲端網址、測試連線、匯出本機資料。</p>
+      </div>
+      <div class="admin-panel" data-admin-panel hidden>
+        <form class="admin-form" data-admin-form>
+          <label>Google Apps Script 雲端網址<input name="cloudEndpoint" type="text" placeholder="https://script.google.com/macros/s/AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz/exec"></label>
+          <label>遠端內容設定 JSON 網址<input name="contentConfigUrl" type="text" placeholder="shen-yue-assistant-content.json"></label>
+          <label>首頁標題<input name="heroTitle" type="text" placeholder="車機教學、保固資料、售後聯絡。"></label>
+          <label>店家電話<input name="shopPhone" type="text" value="0970-117-708"></label>
+          <label>LINE ID<input name="lineId" type="text" value="7708LUNG"></label>
+          <button type="submit">儲存管理設定</button>
+        </form>
+        <div class="admin-tools">
+          <button class="secondary-button" type="button" data-load-content>讀取遠端內容</button>
+          <button class="secondary-button" type="button" data-test-cloud>測試雲端連線</button>
+          <button class="secondary-button" type="button" data-export-data>匯出本機資料</button>
+        </div>
+        <pre class="admin-output" data-admin-output>管理模式尚未開啟。</pre>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="contact" data-tab-panel>
+      <div class="panel-head">
+        <p>Contact</p>
+        <h2>聯絡申悅</h2>
+      </div>
+      <div class="contact-grid">
+        <div>
+          <p>傳車款年份、中控照片、想升級的功能，可更快取得建議。</p>
+          <div class="contact-links">
+            <a href="tel:0970117708">電話：0970-117-708</a>
+            <a href="https://line.me/R/ti/p/@585eeefp" target="_blank" rel="noopener">LINE：@585eeefp</a>
+            <a href="https://www.youtube.com/@shenyue6916" target="_blank" rel="noopener">YouTube 頻道</a>
+            <a href="https://www.facebook.com/cccc7708" target="_blank" rel="noopener">Facebook 粉絲頁</a>
+          </div>
+        </div>
+        <div class="qr-wrap">
+          <figure><img src="qr-line.png" alt="申悅 LINE QR Code"><figcaption>掃描 LINE</figcaption></figure>
+          <figure><img src="qr-phone.png" alt="申悅電話 QR Code"><figcaption>掃描撥號</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="legal-section">
+      <h2>資料使用說明</h2>
+      <p>本 App 的保固資料預設只保存在目前裝置。按下上傳後，資料會送到申悅設定的 Google Apps Script 雲端資料庫。外部連結會開啟 LINE、電話、YouTube、Facebook 或 Google Maps。</p>
+    </section>
+  </main>
+
+  <button class="admin-gear" type="button" data-admin-shortcut aria-label="管理設定">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 8.4A3.6 3.6 0 1 0 12 15.6 3.6 3.6 0 0 0 12 8.4Zm8.2 3.6c0-.5-.1-1-.2-1.5l2-1.5-2-3.5-2.4 1a8.6 8.6 0 0 0-2.5-1.5L14.8 2h-4l-.4 3a8.6 8.6 0 0 0-2.5 1.5l-2.4-1-2 3.5 2 1.5A7.3 7.3 0 0 0 5.4 12c0 .5.1 1 .2 1.5l-2 1.5 2 3.5 2.4-1a8.6 8.6 0 0 0 2.5 1.5l.4 3h4l.4-3a8.6 8.6 0 0 0 2.5-1.5l2.4 1 2-3.5-2-1.5c.1-.5.2-1 .2-1.5Z"/>
+    </svg>
+  </button>
+
+  <footer class="app-footer">
+    <p>申悅安卓汽車影音｜彰化市竹和路453號｜週一至週六 10:30-20:00</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

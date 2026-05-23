@@ -1,0 +1,80 @@
+apply plugin: "com.android.application"
+
+def generatedWebAssetsDir = layout.buildDirectory.dir("generated/assets/builtIn").get().asFile
+def webAssetNames = [
+    "index.html",
+    "app.js",
+    "styles.css",
+    "service-worker.js",
+    "manifest.webmanifest",
+    "shen-yue-assistant-content.json",
+    "app-logo.png",
+    "sy-product-icons.png",
+    "hero-car-audio.png",
+    "icon-car-android.png",
+    "icon-360-camera.png",
+    "icon-dashcam.png",
+    "icon-car-audio.png",
+    "icon-tailgate.png",
+    "icon-blind-spot.png",
+    "qr-line.png",
+    "qr-phone.png",
+    "product-android.jpg",
+    "product-360.png",
+    "audio-case.jpg",
+    "case-lexus-rx200t.jpg",
+    "case-honda-crv5.jpg"
+]
+
+tasks.register("syncBuiltInAssets", Copy) {
+    from(rootProject.projectDir.parentFile) {
+        include webAssetNames
+        into "www"
+    }
+    into generatedWebAssetsDir
+}
+
+android {
+    namespace "tw.com.shenyue.assistant"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "tw.com.shenyue.assistant"
+        minSdk 23
+        targetSdk 36
+        versionCode 101
+        versionName "1.0.1"
+    }
+
+    flavorDimensions "content"
+
+    productFlavors {
+        builtIn {
+            dimension "content"
+            applicationIdSuffix ".builtin"
+            versionNameSuffix "-built-in"
+            resValue "string", "app_name", "申悅車機助手 內建版"
+            buildConfigField "String", "HOME_URL", "\"file:///android_asset/www/index.html\""
+        }
+
+        github {
+            dimension "content"
+            versionNameSuffix "-github"
+            resValue "string", "app_name", "申悅車機助手 GitHub版"
+            buildConfigField "String", "HOME_URL", "\"https://sylong7708.github.io/shen-yue-iphone-assistant/\""
+        }
+    }
+
+    sourceSets {
+        builtIn {
+            assets.srcDirs = [generatedWebAssetsDir]
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+        resValues true
+    }
+}
+
+preBuild.dependsOn("syncBuiltInAssets")
