@@ -195,7 +195,7 @@ h3 {
   top: 72px;
   z-index: 19;
   display: grid;
-  grid-template-columns: repeat(7, minmax(90px, 1fr));
+  grid-template-columns: repeat(6, minmax(90px, 1fr));
   gap: 8px;
   overflow-x: auto;
   padding: 10px clamp(10px, 3vw, 28px);
@@ -1210,7 +1210,7 @@ h3 {
 
   .tab-bar {
     top: 92px;
-    grid-template-columns: repeat(7, 108px);
+    grid-template-columns: repeat(6, 108px);
   }
 
   .dashboard-grid,

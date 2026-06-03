@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v204-in-app-update-center";
+const cacheName = "shen-yue-assistant-v204-no-delivery-tab";
 const assets = [
   "./",
   "./index.html",
