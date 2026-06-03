@@ -1,6 +1,6 @@
-﻿{
-  "name": "申悅車機助手",
-  "short_name": "申悅車機助手",
+{
+  "name": "申悅助手",
+  "short_name": "申悅助手",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -9,7 +9,7 @@
   "lang": "zh-Hant",
   "icons": [
     {
-      "src": "app-logo.png",
+      "src": "assets/app-logo.png",
       "sizes": "1024x1024",
       "type": "image/png",
       "purpose": "any"

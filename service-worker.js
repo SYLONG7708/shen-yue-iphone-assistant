@@ -1,24 +1,26 @@
-const cacheName = "shen-yue-assistant-github-live-v5";
+const cacheName = "shen-yue-assistant-v204-in-app-update-center";
 const assets = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./updates.json",
   "./manifest.webmanifest",
-  "./app-logo.png",
-  "./sy-product-icons.png",
-  "./hero-car-audio.png",
-  "./icon-car-android.png",
-  "./icon-360-camera.png",
-  "./icon-dashcam.png",
-  "./icon-car-audio.png",
-  "./icon-tailgate.png",
-  "./icon-blind-spot.png",
-  "./qr-line.png",
-  "./qr-phone.png",
-  "./product-android.jpg",
-  "./product-360.png",
-  "./audio-case.jpg"
+  "./assets/app-logo.png",
+  "./assets/update-splash.png",
+  "./assets/sy-product-icons.png",
+  "./assets/hero-car-audio.png",
+  "./assets/icon-car-android.png",
+  "./assets/icon-360-camera.png",
+  "./assets/icon-dashcam.png",
+  "./assets/icon-car-audio.png",
+  "./assets/icon-tailgate.png",
+  "./assets/icon-blind-spot.png",
+  "./assets/qr-line.png",
+  "./assets/qr-phone.png",
+  "./assets/product-android.jpg",
+  "./assets/product-360.png",
+  "./assets/audio-case.jpg"
 ];
 
 self.addEventListener("install", (event) => {

@@ -1,30 +1,25 @@
-# 申悅車機助手 iPhone 手機版 專業商業版
+# 申悅更新中心 GitHub 上傳包
 
-這是一個 iPhone Safari 可加入主畫面的商業版 PWA App。上傳網站後，客戶可從 iPhone 主畫面用接近 App 的全螢幕體驗開啟。
+把本資料夾裡面的內容上傳到 `https://github.com/SYLONG7708/update` 的根目錄。
 
-## 主要功能
+上傳後車機 App 會讀取：
 
-- 一鍵 LINE 聯絡申悅
-- 一鍵撥打電話
-- 一鍵導航到店
-- YouTube 頻道入口
-- Facebook 粉絲頁入口
-- 車載安卓機教學
-- 保固與安裝紀錄，本機儲存
-- 主機規格新版選項
-- 其他產品類別自行輸入
-- 離線快取
+```text
+https://raw.githubusercontent.com/SYLONG7708/update/main/updates.json
+```
 
-## iPhone 使用方式
+## 重要檔案
 
-1. 把本資料夾整個上傳到網站主機。
-2. 用 iPhone Safari 開啟網站網址。
-3. 點選 Safari 分享按鈕。
-4. 選擇「加入主畫面」。
-5. 名稱使用「申悅車機助手」，按「新增」。
+- `updates.json`：雲端更新清單。
+- `apks/`：APK 下載檔案。
+- `assets/update-icons/`：每個 APK 的方形圖標。
+- `assets/update-apps/`：每個 APK 的單獨詳情頁圖片。
+- `index.html`、`app.js`、`styles.css`：網頁版更新中心。
 
-## 本機測試
+## 修改方式
 
-在此資料夾用瀏覽器開啟 `index.html` 可看畫面。
+只要修改 `updates.json` 的 `name`、`description`、`iconUrl`、`imageUrl`、`apkUrl`、`sha256` 後重新上傳，車機端按「重新整理」即可看到變更，不必重新安裝更新中心 APK。
 
-若要測試離線快取，需透過網站或本機伺服器開啟，不能只用檔案路徑測試 service worker。
+## 大檔提醒
+
+目前包內有部分 APK 超過 100 MB。這些大檔不一定能直接放進 GitHub repository；如果上傳失敗，請把 APK 放到 GitHub Release 或其他雲端，然後改 `updates.json` 的 `apkUrl`。
