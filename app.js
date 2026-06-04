@@ -9,8 +9,6 @@ const adminShortcut = document.querySelector("[data-admin-shortcut]");
 const videoGrid = document.querySelector("[data-video-grid]");
 const videoSearch = document.querySelector("[data-video-search]");
 const serviceGrid = document.querySelector("[data-service-grid]");
-const photoInput = document.querySelector("[data-photo-input]");
-const photoPreview = document.querySelector("[data-photo-preview]");
 const updateUrlInput = document.querySelector("[data-update-url]");
 const updateStatus = document.querySelector("[data-update-status]");
 const updateDevice = document.querySelector("[data-update-device]");
@@ -26,10 +24,24 @@ const defaultCloudEndpoint = "https://script.google.com/macros/s/AKfycbxxtXq2Jno
 const defaultContentConfigUrl = "https://shen-yue.com.tw/shen-yue-assistant-content.json";
 const legacyUpdateManifestUrl = "https://sylong7708.github.io/shen-yue-iphone-assistant/updates.json";
 const defaultUpdateManifestUrl = "https://raw.githubusercontent.com/SYLONG7708/update/main/updates.json";
+const currentLineId = "@585eeefp";
+const legacyLineIds = new Set(["7708LUNG", "@7708LUNG", "7708lung", "@7708lung"]);
+const warrantyModelOptions = [
+  "SY-C4 四核 2g+32g",
+  "SY-B8 八核 2g+64g",
+  "SY-A8 八核 4g+64g",
+  "SY-K8 八核 8g+128g",
+  "SY-X8 八核 8g+256g",
+  "SY-Z13 八核 8g+256g（13吋）",
+  "SY-A8-V 八核 4g+64g（環景）",
+  "SY-K8-V 八核 8g+128g（環景）",
+  "SY-X8-V 八核 8g+256g（環景）",
+  "SY-Z13-V 八核 8g+256g（13吋環景）"
+];
+const warrantyModelSet = new Set(warrantyModelOptions);
 let deferredInstallPrompt = null;
 let activeVideoCategory = "all";
 let lastRemoteContentCheck = 0;
-let warrantyPhotos = [];
 let updateCenterLoaded = false;
 let currentUpdateItems = [];
 let currentInstalledMap = new Map();
@@ -84,16 +96,68 @@ function getRecord() {
   return JSON.parse(localStorage.getItem(storageKey) || "{}");
 }
 
+function normalizeLineId(value) {
+  const text = String(value || "").trim();
+  if (!text || legacyLineIds.has(text) || text.includes("7708LUNG")) return currentLineId;
+  if (text.startsWith("https://line.me/R/ti/p/")) {
+    return normalizeLineId(decodeURIComponent(text.split("/").pop() || ""));
+  }
+  return text.startsWith("@") ? text : `@${text}`;
+}
+
+function cleanWarrantyRecord(record = {}) {
+  const clean = { ...record };
+  delete clean.photos;
+  delete clean.photo;
+  delete clean.photoCount;
+
+  if (clean.model && !warrantyModelSet.has(clean.model)) {
+    delete clean.model;
+  }
+
+  return clean;
+}
+
+function migrateLegacyData() {
+  try {
+    const savedAdmin = JSON.parse(localStorage.getItem(adminKey) || "{}");
+    if (Object.keys(savedAdmin).length) {
+      const nextAdmin = { ...savedAdmin, lineId: normalizeLineId(savedAdmin.lineId) };
+      if (JSON.stringify(nextAdmin) !== JSON.stringify(savedAdmin)) {
+        localStorage.setItem(adminKey, JSON.stringify(nextAdmin));
+      }
+    }
+  } catch {
+    localStorage.removeItem(adminKey);
+  }
+
+  try {
+    const savedRecord = getRecord();
+    const cleanRecord = cleanWarrantyRecord(savedRecord);
+    if (JSON.stringify(cleanRecord) !== JSON.stringify(savedRecord)) {
+      localStorage.setItem(storageKey, JSON.stringify(cleanRecord));
+    }
+  } catch {
+    localStorage.removeItem(storageKey);
+  }
+
+  localStorage.removeItem("shenYueWarrantyPhotos");
+  localStorage.removeItem("shenYueWarrantyPhotoCache");
+  localStorage.removeItem("shenYueCarWarrantyPhotos");
+}
+
 function getAdminSettings() {
   const saved = JSON.parse(localStorage.getItem(adminKey) || "{}");
-  return {
+  const settings = {
     cloudEndpoint: defaultCloudEndpoint,
     contentConfigUrl: defaultContentConfigUrl,
     heroTitle: defaultContent.heroTitle,
     shopPhone: "0970-117-708",
-    lineId: "@585eeefp",
+    lineId: currentLineId,
     ...saved
   };
+  settings.lineId = normalizeLineId(settings.lineId);
+  return settings;
 }
 
 function escapeHtml(value) {
@@ -205,9 +269,19 @@ async function sendToCloud(payload) {
   });
 }
 
+function renderEmptyRecord() {
+  recordCard.innerHTML = `
+    <h3>目前沒有儲存紀錄</h3>
+    <p>輸入後會保存在目前裝置；按「儲存並直接上傳」會送到申悅雲端。</p>
+  `;
+}
+
 function renderRecord() {
   const record = getRecord();
-  if (!Object.keys(record).length) return;
+  if (!Object.keys(record).length) {
+    renderEmptyRecord();
+    return;
+  }
 
   recordCard.innerHTML = `
     <h3>${record.owner || "姓名未設定"}</h3>
@@ -219,56 +293,12 @@ function renderRecord() {
     <p><strong>安裝日期：</strong>${record.installDate ? formatDate(record.installDate) : "未設定"}</p>
     <p><strong>保固到期日：</strong>${record.warrantyDate ? formatDate(record.warrantyDate) : "未設定"}</p>
     <p><strong>備註：</strong>${record.note || "未設定"}</p>
-    <p><strong>照片：</strong>${warrantyPhotos.length ? `${warrantyPhotos.length} 張待上傳` : "未選擇"}</p>
   `;
 
   for (const [key, value] of Object.entries(record)) {
     const input = recordForm.elements[key];
     if (input) input.value = value;
   }
-}
-
-function readImage(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function compressImage(dataUrl) {
-  return new Promise((resolve) => {
-    const image = new Image();
-    image.onload = () => {
-      const scale = Math.min(1, 1280 / image.width);
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(image.width * scale);
-      canvas.height = Math.round(image.height * scale);
-      canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", 0.72));
-    };
-    image.src = dataUrl;
-  });
-}
-
-async function prepareWarrantyPhotos(files) {
-  warrantyPhotos = [];
-  const selected = [...files].slice(0, 6);
-
-  for (const file of selected) {
-    const raw = await readImage(file);
-    warrantyPhotos.push({
-      name: file.name,
-      type: "image/jpeg",
-      dataUrl: await compressImage(raw)
-    });
-  }
-
-  photoPreview.innerHTML = warrantyPhotos.length
-    ? warrantyPhotos.map((photo) => `<img src="${photo.dataUrl}" alt="${escapeHtml(photo.name)}">`).join("")
-    : "<p>尚未選擇照片。</p>";
-  renderRecord();
 }
 
 function youtubeId(url) {
@@ -657,52 +687,35 @@ function restoreChecklist() {
   });
 }
 
+async function saveAndUploadWarranty() {
+  if (!recordForm.reportValidity()) return;
+  const data = cleanWarrantyRecord(Object.fromEntries(new FormData(recordForm).entries()));
+  localStorage.setItem(storageKey, JSON.stringify(data));
+  renderRecord();
+  cloudStatus.textContent = "正在上傳保固資料到 Apps Script...";
+  try {
+    await sendToCloud(getPayload("iphone-warranty", data));
+    cloudStatus.textContent = "保固資料已儲存並上傳到申悅 Apps Script。";
+  } catch (error) {
+    cloudStatus.textContent = `上傳失敗：${error.message}`;
+  }
+}
+
 recordForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(recordForm).entries());
-  delete data.photos;
-  localStorage.setItem(storageKey, JSON.stringify(data));
-  renderRecord();
-  cloudStatus.textContent = "保固資料已儲存，可上傳到 Apps Script。";
+  saveAndUploadWarranty();
 });
 
-document.querySelector("[data-save-upload-warranty]").addEventListener("click", async () => {
-  if (!recordForm.reportValidity()) return;
-  const data = Object.fromEntries(new FormData(recordForm).entries());
-  delete data.photos;
-  localStorage.setItem(storageKey, JSON.stringify(data));
-  renderRecord();
-  cloudStatus.textContent = "正在上傳保固資料與照片到 Apps Script...";
-  try {
-    await sendToCloud(getPayload("iphone-warranty", { ...data, photos: warrantyPhotos }));
-    cloudStatus.textContent = "保固資料已儲存並上傳到申悅 Apps Script。";
-    photoInput.value = "";
-    warrantyPhotos = [];
-    photoPreview.innerHTML = "<p>尚未選擇照片。</p>";
-    renderRecord();
-  } catch (error) {
-    cloudStatus.textContent = `上傳失敗：${error.message}`;
-  }
-});
+document.querySelector("[data-save-upload-warranty]").addEventListener("click", saveAndUploadWarranty);
 
-document.querySelector("[data-upload-warranty]").addEventListener("click", async () => {
-  const record = getRecord();
-  if (!Object.keys(record).length) {
-    cloudStatus.textContent = "請先填寫並儲存保固紀錄。";
-    return;
-  }
-  try {
-    await sendToCloud(getPayload("iphone-warranty", { ...record, photos: warrantyPhotos }));
-    cloudStatus.textContent = "保固資料與照片已送出到申悅雲端。";
-  } catch (error) {
-    cloudStatus.textContent = `上傳失敗：${error.message}`;
-  }
-});
-
-photoInput.addEventListener("change", async () => {
-  cloudStatus.textContent = "照片處理中...";
-  await prepareWarrantyPhotos(photoInput.files);
-  cloudStatus.textContent = `已選擇 ${warrantyPhotos.length} 張照片。`;
+document.querySelector("[data-clear-warranty]").addEventListener("click", () => {
+  localStorage.removeItem(storageKey);
+  localStorage.removeItem("shenYueWarrantyPhotos");
+  localStorage.removeItem("shenYueWarrantyPhotoCache");
+  localStorage.removeItem("shenYueCarWarrantyPhotos");
+  recordForm.reset();
+  renderEmptyRecord();
+  cloudStatus.textContent = "本機保固資料已清除。";
 });
 
 document.addEventListener("click", (event) => {
@@ -801,13 +814,14 @@ document.querySelector("[data-admin-login]").addEventListener("click", () => {
   form.elements.contentConfigUrl.value = settings.contentConfigUrl || "";
   form.elements.heroTitle.value = settings.heroTitle || defaultContent.heroTitle;
   form.elements.shopPhone.value = settings.shopPhone || "0970-117-708";
-  form.elements.lineId.value = settings.lineId || "7708LUNG";
+  form.elements.lineId.value = settings.lineId || currentLineId;
   adminOutput.textContent = "管理模式已開啟。\n可設定雲端網址、測試連線、匯出本機資料。";
 });
 
 document.querySelector("[data-admin-form]").addEventListener("submit", (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+  data.lineId = normalizeLineId(data.lineId);
   localStorage.setItem(adminKey, JSON.stringify(data));
   applyContent({ heroTitle: data.heroTitle });
   adminOutput.textContent = `已儲存管理設定：\n${JSON.stringify(data, null, 2)}`;
@@ -862,6 +876,7 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) checkRemoteContentNow();
 });
 
+migrateLegacyData();
 renderRecord();
 restoreChecklist();
 renderVideos();

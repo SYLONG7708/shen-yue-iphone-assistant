@@ -275,8 +275,7 @@ h3 {
 .cloud-actions,
 .admin-lock,
 .admin-panel,
-.contact-grid,
-.legal-section {
+.contact-grid {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -363,8 +362,7 @@ h3 {
 .update-status,
 .update-device,
 .cloud-actions p,
-.contact-grid p,
-.legal-section p {
+.contact-grid p {
   color: var(--muted);
   line-height: 1.75;
 }
@@ -540,36 +538,6 @@ h3 {
   grid-column: span 2;
 }
 
-.photo-field input {
-  padding: 14px;
-  color: #111827;
-}
-
-.photo-preview {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 16px;
-  padding: 14px;
-  background: rgba(13, 25, 36, 0.72);
-  border: 1px solid rgba(133, 206, 255, 0.18);
-  border-radius: 12px;
-}
-
-.photo-preview p {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: #b9cfe0;
-}
-
-.photo-preview img {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
 .record-card,
 .cloud-actions,
 .admin-lock,
@@ -716,11 +684,6 @@ h3 {
   padding: 10px;
   text-align: center;
   font-weight: 900;
-}
-
-.legal-section {
-  margin: 0 clamp(14px, 5vw, 64px) 36px;
-  padding: 24px;
 }
 
 .app-footer {
@@ -1194,10 +1157,6 @@ h3 {
     grid-column: span 2;
   }
 
-  .photo-preview {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .contact-grid {
     grid-template-columns: 1fr;
   }
@@ -1254,10 +1213,6 @@ h3 {
 
   .record-note {
     grid-column: span 1;
-  }
-
-  .photo-preview {
-    grid-template-columns: 1fr;
   }
 
   .hero {

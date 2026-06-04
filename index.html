@@ -18,7 +18,7 @@
       <strong>申悅車機助手</strong>
     </a>
     <div class="header-actions">
-      <a href="https://line.me/R/ti/p/7708LUNG" target="_blank" rel="noopener">LINE</a>
+      <a href="https://line.me/R/ti/p/@585eeefp" target="_blank" rel="noopener">LINE</a>
       <a href="tel:0970117708">電話</a>
       <button type="button" data-install hidden>安裝</button>
     </div>
@@ -95,7 +95,7 @@
       <div class="panel-head warranty-head">
         <p>Warranty</p>
         <h2>保固資料登錄</h2>
-        <span>依照申悅雲端捷徑格式填寫，可連同照片上傳到 Google Apps Script。</span>
+        <span>依照申悅雲端捷徑格式填寫，按下儲存並直接上傳即可送到 Google Apps Script。</span>
       </div>
       <form class="record-form" data-record-form>
         <label>車主姓名<input name="owner" type="text" placeholder="王先生" autocomplete="name" required></label>
@@ -105,30 +105,29 @@
         <label>安裝項目<input name="items" type="text" placeholder="安卓機、倒車顯影"></label>
         <label>主機規格
           <select name="model">
-            <option>SY-Z13(8G256G)</option>
-            <option>SY-X8(8G128G)</option>
-            <option>SY-A8(4G32G)</option>
-            <option>SY-B8(2G64G)</option>
-            <option>SY-Z13B(8G256G環景)</option>
-            <option>SY-X8V(8G128G環景)</option>
-            <option>SY-A8V(4G32G環景)</option>
-            <option>其他 / 需備註</option>
+            <option>SY-C4 四核 2g+32g</option>
+            <option>SY-B8 八核 2g+64g</option>
+            <option>SY-A8 八核 4g+64g</option>
+            <option>SY-K8 八核 8g+128g</option>
+            <option>SY-X8 八核 8g+256g</option>
+            <option>SY-Z13 八核 8g+256g（13吋）</option>
+            <option>SY-A8-V 八核 4g+64g（環景）</option>
+            <option>SY-K8-V 八核 8g+128g（環景）</option>
+            <option>SY-X8-V 八核 8g+256g（環景）</option>
+            <option>SY-Z13-V 八核 8g+256g（13吋環景）</option>
           </select>
         </label>
         <label>安裝日期<input name="installDate" type="date"></label>
         <label>保固到期日<input name="warrantyDate" type="date"></label>
         <label class="record-note">備註<textarea name="note" placeholder="補充說明、主機序號、保固範圍或特殊狀況"></textarea></label>
-        <label class="record-note photo-field">保固照片<input name="photos" type="file" accept="image/*" multiple data-photo-input></label>
-        <button type="submit">儲存本機紀錄</button>
         <button class="secondary-button" type="button" data-save-upload-warranty>儲存並直接上傳</button>
       </form>
-      <div class="photo-preview" data-photo-preview><p>尚未選擇照片。</p></div>
       <article class="record-card" data-record-card>
         <h3>目前沒有儲存紀錄</h3>
-        <p>輸入後會保存在目前裝置，可連同照片手動上傳到申悅雲端。</p>
+        <p>輸入後會保存在目前裝置；按「儲存並直接上傳」會送到申悅雲端。</p>
       </article>
       <div class="cloud-actions">
-        <button type="button" data-upload-warranty>上傳保固資料到雲端</button>
+        <button type="button" data-clear-warranty>清除保固資料</button>
         <p data-cloud-status>已設定申悅雲端網址，可上傳保固資料。</p>
       </div>
     </section>
@@ -175,7 +174,7 @@
           <label>遠端內容設定 JSON 網址<input name="contentConfigUrl" type="url" placeholder="https://shen-yue.com.tw/shen-yue-assistant-content.json"></label>
           <label>首頁標題<input name="heroTitle" type="text" placeholder="車機教學、保固資料、售後聯絡。"></label>
           <label>店家電話<input name="shopPhone" type="text" value="0970-117-708"></label>
-          <label>LINE ID<input name="lineId" type="text" value="7708LUNG"></label>
+          <label>LINE ID<input name="lineId" type="text" value="@585eeefp"></label>
           <button type="submit">儲存管理設定</button>
         </form>
         <div class="admin-tools">
@@ -209,10 +208,6 @@
       </div>
     </section>
 
-    <section class="legal-section">
-      <h2>資料使用說明</h2>
-      <p>本 App 的保固資料預設只保存在目前裝置。按下上傳後，資料會送到申悅設定的 Google Apps Script 雲端資料庫。外部連結會開啟 LINE、電話、YouTube、Facebook 或 Google Maps。</p>
-    </section>
   </main>
 
   <button class="admin-gear" type="button" data-admin-shortcut aria-label="管理設定">
