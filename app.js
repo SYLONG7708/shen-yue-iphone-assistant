@@ -20,12 +20,15 @@ const checklistKey = "shenYueDeliveryChecklist";
 const adminKey = "shenYueAdminSettings";
 const updateUrlKey = "shenYueUpdateManifestUrl";
 const adminPin = "7708";
-const defaultCloudEndpoint = "https://script.google.com/macros/s/AKfycbxxtXq2JnoqYHU7rHDo4Ddfe_ZfPzwDolglZsbBmY2j1YUkV1fbqcFv8KhNh-stPL8/exec";
+const defaultCloudEndpoint = "https://script.google.com/macros/s/AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz/exec";
 const defaultContentConfigUrl = "https://shen-yue.com.tw/shen-yue-assistant-content.json";
 const legacyUpdateManifestUrl = "https://sylong7708.github.io/shen-yue-iphone-assistant/updates.json";
 const defaultUpdateManifestUrl = "https://raw.githubusercontent.com/SYLONG7708/update/main/updates.json";
 const currentLineId = "@585eeefp";
 const legacyLineIds = new Set(["7708LUNG", "@7708LUNG", "7708lung", "@7708lung"]);
+const legacyCloudEndpoints = new Set([
+  "https://script.google.com/macros/s/AKfycbxxtXq2JnoqYHU7rHDo4Ddfe_ZfPzwDolglZsbBmY2j1YUkV1fbqcFv8KhNh-stPL8/exec"
+]);
 const warrantyModelOptions = [
   "SY-C4 四核 2g+32g",
   "SY-B8 八核 2g+64g",
@@ -105,6 +108,12 @@ function normalizeLineId(value) {
   return text.startsWith("@") ? text : `@${text}`;
 }
 
+function normalizeCloudEndpoint(value) {
+  const text = String(value || "").trim();
+  if (!text || legacyCloudEndpoints.has(text)) return defaultCloudEndpoint;
+  return text;
+}
+
 function cleanWarrantyRecord(record = {}) {
   const clean = { ...record };
   delete clean.photos;
@@ -122,7 +131,11 @@ function migrateLegacyData() {
   try {
     const savedAdmin = JSON.parse(localStorage.getItem(adminKey) || "{}");
     if (Object.keys(savedAdmin).length) {
-      const nextAdmin = { ...savedAdmin, lineId: normalizeLineId(savedAdmin.lineId) };
+      const nextAdmin = {
+        ...savedAdmin,
+        cloudEndpoint: normalizeCloudEndpoint(savedAdmin.cloudEndpoint),
+        lineId: normalizeLineId(savedAdmin.lineId)
+      };
       if (JSON.stringify(nextAdmin) !== JSON.stringify(savedAdmin)) {
         localStorage.setItem(adminKey, JSON.stringify(nextAdmin));
       }
@@ -157,6 +170,7 @@ function getAdminSettings() {
     ...saved
   };
   settings.lineId = normalizeLineId(settings.lineId);
+  settings.cloudEndpoint = normalizeCloudEndpoint(settings.cloudEndpoint);
   return settings;
 }
 
@@ -821,6 +835,7 @@ document.querySelector("[data-admin-login]").addEventListener("click", () => {
 document.querySelector("[data-admin-form]").addEventListener("submit", (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+  data.cloudEndpoint = normalizeCloudEndpoint(data.cloudEndpoint);
   data.lineId = normalizeLineId(data.lineId);
   localStorage.setItem(adminKey, JSON.stringify(data));
   applyContent({ heroTitle: data.heroTitle });
