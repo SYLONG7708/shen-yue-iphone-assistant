@@ -49,6 +49,7 @@ let updateCenterLoaded = false;
 let currentUpdateItems = [];
 let currentInstalledMap = new Map();
 let currentUpdateManifestUrl = "updates.json";
+let lastFocusedVideoTrigger = null;
 
 const defaultContent = {
   heroTitle: "車機教學、保固資料、售後聯絡。",
@@ -315,11 +316,103 @@ function renderRecord() {
   }
 }
 
-function youtubeId(url) {
-  const shortMatch = url.match(/youtu\.be\/([^?&]+)/);
-  if (shortMatch) return shortMatch[1];
-  const normalMatch = url.match(/[?&]v=([^?&]+)/);
-  return normalMatch ? normalMatch[1] : "";
+function youtubeId(value) {
+  const url = String(value || "").trim();
+  if (!url) return "";
+
+  try {
+    const parsed = new URL(url, location.href);
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (host === "youtu.be") {
+      return parsed.pathname.split("/").filter(Boolean)[0] || "";
+    }
+    if (host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")) {
+      const pathMatch = parsed.pathname.match(/^\/(?:embed|shorts|live)\/([^/?]+)/);
+      return parsed.searchParams.get("v") || pathMatch?.[1] || "";
+    }
+  } catch {
+    const shortMatch = url.match(/youtu\.be\/([^?&]+)/);
+    if (shortMatch) return shortMatch[1];
+    const normalMatch = url.match(/[?&]v=([^?&]+)/);
+    return normalMatch ? normalMatch[1] : "";
+  }
+
+  return "";
+}
+
+function youtubePlaylistId(value) {
+  const url = String(value || "").trim();
+  if (!url) return "";
+
+  try {
+    return new URL(url, location.href).searchParams.get("list") || "";
+  } catch {
+    const match = url.match(/[?&]list=([^?&]+)/);
+    return match ? match[1] : "";
+  }
+}
+
+function youtubeEmbedUrl(value) {
+  const id = youtubeId(value);
+  const playlistId = youtubePlaylistId(value);
+  const params = new URLSearchParams({
+    autoplay: "1",
+    rel: "0",
+    playsinline: "1"
+  });
+
+  if (playlistId) params.set("list", playlistId);
+  if (id) return `https://www.youtube.com/embed/${encodeURIComponent(id)}?${params.toString()}`;
+  if (playlistId) return `https://www.youtube.com/embed/videoseries?${params.toString()}`;
+  return "";
+}
+
+function vimeoEmbedUrl(value) {
+  const url = String(value || "").trim();
+  if (!url) return "";
+
+  try {
+    const parsed = new URL(url, location.href);
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (host === "player.vimeo.com") return url;
+    if (!host.endsWith("vimeo.com")) return "";
+    const id = parsed.pathname.split("/").find((segment) => /^\d+$/.test(segment));
+    return id ? `https://player.vimeo.com/video/${id}?autoplay=1` : "";
+  } catch {
+    return "";
+  }
+}
+
+function isDirectVideoUrl(value) {
+  return /\.(mp4|m4v|webm|ogv|ogg|mov|m3u8)(?:[?#].*)?$/i.test(String(value || ""));
+}
+
+function directVideoType(value) {
+  const cleanUrl = String(value || "").split(/[?#]/)[0];
+  const extension = cleanUrl.split(".").pop().toLowerCase();
+  const types = {
+    mp4: "video/mp4",
+    m4v: "video/mp4",
+    webm: "video/webm",
+    ogv: "video/ogg",
+    ogg: "video/ogg",
+    mov: "video/quicktime",
+    m3u8: "application/vnd.apple.mpegurl"
+  };
+  return types[extension] || "video/mp4";
+}
+
+function getVideoSource(video = {}) {
+  const rawUrl = String(video.embedUrl || video.videoUrl || video.url || "").trim();
+  if (!rawUrl) return { kind: "empty", url: "" };
+  if (isDirectVideoUrl(rawUrl)) {
+    return { kind: "video", url: rawUrl, type: directVideoType(rawUrl) };
+  }
+
+  return {
+    kind: "iframe",
+    url: youtubeEmbedUrl(rawUrl) || vimeoEmbedUrl(rawUrl) || rawUrl
+  };
 }
 
 function thumbUrl(url) {
@@ -339,19 +432,122 @@ function renderVideos() {
     return inCategory && inQuery;
   });
 
-  videoGrid.innerHTML = filtered.map((video) => `
+  videoGrid.innerHTML = filtered.map((video) => {
+    const originalIndex = videos.indexOf(video);
+    return `
     <article class="video-card">
-      <a class="video-thumb" href="${video.url}" target="_blank" rel="noopener">
-        <img src="${thumbUrl(video.url)}" alt="${video.title}" loading="lazy">
+      <button class="video-thumb" type="button" data-video-open="${originalIndex}" aria-label="播放 ${escapeHtml(video.title)}">
+        <img src="${thumbUrl(video.thumbnail || video.poster || video.url)}" alt="${escapeHtml(video.title)}" loading="lazy">
         <span>播放</span>
-      </a>
+      </button>
       <div class="video-body">
-        <h3>${video.title}</h3>
-        <p>${video.category}</p>
-        <a href="${video.url}" target="_blank" rel="noopener">開啟教學</a>
+        <h3>${escapeHtml(video.title)}</h3>
+        <p>${escapeHtml(video.category)}</p>
+        <button type="button" data-video-open="${originalIndex}">開啟教學</button>
       </div>
     </article>
-  `).join("");
+  `;
+  }).join("");
+}
+
+function getVideoModal() {
+  let modal = document.querySelector("[data-video-modal]");
+  if (modal) return modal;
+
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="video-modal" data-video-modal hidden>
+      <div class="video-modal-shell" data-video-shell role="dialog" aria-modal="true" aria-labelledby="video-modal-title">
+        <div class="video-modal-top">
+          <div>
+            <h3 id="video-modal-title" data-video-modal-title></h3>
+            <p data-video-modal-meta></p>
+          </div>
+          <div class="video-modal-actions">
+            <button type="button" data-video-expand>放大</button>
+            <button type="button" data-video-close>關閉</button>
+          </div>
+        </div>
+        <div class="video-player-frame" data-video-player></div>
+      </div>
+    </div>
+  `);
+
+  return document.querySelector("[data-video-modal]");
+}
+
+function openVideoPlayer(index) {
+  const video = videos[index];
+  if (!video) return;
+
+  const modal = getVideoModal();
+  const title = modal.querySelector("[data-video-modal-title]");
+  const meta = modal.querySelector("[data-video-modal-meta]");
+  const player = modal.querySelector("[data-video-player]");
+  const source = getVideoSource(video);
+  const poster = thumbUrl(video.thumbnail || video.poster || video.url);
+
+  lastFocusedVideoTrigger = document.activeElement;
+  title.textContent = video.title || "";
+  meta.textContent = video.category || "";
+
+  if (source.kind === "video") {
+    player.innerHTML = `
+      <video controls autoplay playsinline poster="${escapeHtml(poster)}">
+        <source src="${escapeHtml(source.url)}" type="${escapeHtml(source.type)}">
+        您的裝置不支援此影片格式。
+      </video>
+    `;
+  } else if (source.kind === "iframe") {
+    player.innerHTML = `
+      <iframe
+        src="${escapeHtml(source.url)}"
+        title="${escapeHtml(video.title)}"
+        loading="eager"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+        allowfullscreen
+        referrerpolicy="strict-origin-when-cross-origin"></iframe>
+    `;
+  } else {
+    player.innerHTML = "";
+  }
+
+  modal.hidden = false;
+  document.body.classList.add("video-modal-open");
+  modal.querySelector("[data-video-close]")?.focus({ preventScroll: true });
+}
+
+function closeVideoPlayer() {
+  const modal = document.querySelector("[data-video-modal]");
+  if (!modal || modal.hidden) return;
+
+  modal.hidden = true;
+  modal.classList.remove("is-expanded");
+  modal.querySelector("[data-video-player]").innerHTML = "";
+  document.body.classList.remove("video-modal-open");
+
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
+  if (lastFocusedVideoTrigger && typeof lastFocusedVideoTrigger.focus === "function") {
+    lastFocusedVideoTrigger.focus({ preventScroll: true });
+  }
+  lastFocusedVideoTrigger = null;
+}
+
+function toggleVideoExpand() {
+  const modal = document.querySelector("[data-video-modal]");
+  const shell = document.querySelector("[data-video-shell]");
+  if (!modal || !shell) return;
+
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+    return;
+  }
+  if (shell.requestFullscreen) {
+    shell.requestFullscreen().catch(() => modal.classList.toggle("is-expanded"));
+    return;
+  }
+  modal.classList.toggle("is-expanded");
 }
 
 function hasNativeUpdater() {
@@ -783,6 +979,32 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const videoOpen = event.target.closest("[data-video-open]");
+  if (videoOpen) {
+    event.preventDefault();
+    openVideoPlayer(Number(videoOpen.dataset.videoOpen));
+    return;
+  }
+
+  const videoClose = event.target.closest("[data-video-close]");
+  if (videoClose) {
+    event.preventDefault();
+    closeVideoPlayer();
+    return;
+  }
+
+  const videoExpand = event.target.closest("[data-video-expand]");
+  if (videoExpand) {
+    event.preventDefault();
+    toggleVideoExpand();
+    return;
+  }
+
+  if (event.target.matches("[data-video-modal]")) {
+    closeVideoPlayer();
+    return;
+  }
+
   const videoFilter = event.target.closest("[data-video-filter]");
   if (videoFilter) {
     activeVideoCategory = videoFilter.dataset.videoFilter;
@@ -790,6 +1012,12 @@ document.addEventListener("click", (event) => {
       button.classList.toggle("active", button === videoFilter);
     });
     renderVideos();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeVideoPlayer();
   }
 });
 

@@ -8,6 +8,8 @@ def webAssetNames = [
     "service-worker.js",
     "manifest.webmanifest",
     "shen-yue-assistant-content.json",
+    "docs/**",
+    "assets/**",
     "app-logo.png",
     "sy-product-icons.png",
     "hero-car-audio.png",
@@ -42,8 +44,8 @@ android {
         applicationId "tw.com.shenyue.assistant"
         minSdk 23
         targetSdk 36
-        versionCode 101
-        versionName "1.0.1"
+        versionCode 102
+        versionName "1.0.2"
     }
 
     flavorDimensions "content"
