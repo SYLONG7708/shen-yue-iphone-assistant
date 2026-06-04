@@ -121,8 +121,12 @@
         </label>
         <label>安裝日期<input name="installDate" type="date"></label>
         <label>保固到期日<input name="warrantyDate" type="date"></label>
+        <label>總金額<input name="totalAmount" type="number" inputmode="numeric" min="0" step="1" placeholder="例如 25000"></label>
         <label class="record-note">備註<textarea name="note" placeholder="補充說明、主機序號、保固範圍或特殊狀況"></textarea></label>
-        <button class="secondary-button" type="button" data-save-upload-warranty>儲存並直接上傳</button>
+        <div class="record-actions">
+          <button type="button" data-copy-warranty>複製保固信息</button>
+          <button class="secondary-button" type="button" data-save-upload-warranty>儲存並直接上傳</button>
+        </div>
       </form>
       <article class="record-card" data-record-card>
         <h3>目前沒有儲存紀錄</h3>

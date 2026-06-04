@@ -654,6 +654,12 @@ body.video-modal-open {
   letter-spacing: 0;
 }
 
+.record-actions {
+  display: grid;
+  gap: 10px;
+  align-self: end;
+}
+
 .record-form .secondary-button {
   background: linear-gradient(135deg, rgba(72, 216, 255, 0.92), rgba(24, 116, 153, 0.96));
 }

@@ -125,6 +125,10 @@ function cleanWarrantyRecord(record = {}) {
     delete clean.model;
   }
 
+  if ("totalAmount" in clean) {
+    clean.totalAmount = String(clean.totalAmount || "").replace(/[^\d.]/g, "").trim();
+  }
+
   return clean;
 }
 
@@ -182,6 +186,46 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function hasText(value) {
+  return String(value ?? "").trim().length > 0;
+}
+
+function displayValue(value) {
+  const text = String(value ?? "").trim();
+  return text ? escapeHtml(text) : "未設定";
+}
+
+function formatAmount(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  const number = Number(text.replaceAll(",", ""));
+  if (!Number.isFinite(number)) return text;
+  return `NT$ ${new Intl.NumberFormat("zh-TW").format(number)}`;
+}
+
+function copyFallback(text) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("目前瀏覽器不允許自動複製");
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  copyFallback(text);
 }
 
 function getPreferredUpdateManifestUrl() {
@@ -298,21 +342,52 @@ function renderRecord() {
     return;
   }
 
+  const amountText = formatAmount(record.totalAmount);
+
   recordCard.innerHTML = `
-    <h3>${record.owner || "姓名未設定"}</h3>
-    <p><strong>聯繫電話：</strong>${record.phone || "未設定"}</p>
-    <p><strong>車牌號碼：</strong>${record.plate || "未設定"}</p>
-    <p><strong>車款年份：</strong>${record.car || "未設定"}</p>
-    <p><strong>安裝項目：</strong>${record.items || "未設定"}</p>
-    <p><strong>主機規格：</strong>${record.model || record.productSpec || "未設定"}</p>
+    <h3>${hasText(record.owner) ? escapeHtml(record.owner) : "姓名未設定"}</h3>
+    <p><strong>聯繫電話：</strong>${displayValue(record.phone)}</p>
+    <p><strong>車牌號碼：</strong>${displayValue(record.plate)}</p>
+    <p><strong>車款年份：</strong>${displayValue(record.car)}</p>
+    <p><strong>安裝項目：</strong>${displayValue(record.items)}</p>
+    <p><strong>主機規格：</strong>${displayValue(record.model || record.productSpec)}</p>
+    <p><strong>總金額：</strong>${amountText ? escapeHtml(amountText) : "未設定"}</p>
     <p><strong>安裝日期：</strong>${record.installDate ? formatDate(record.installDate) : "未設定"}</p>
     <p><strong>保固到期日：</strong>${record.warrantyDate ? formatDate(record.warrantyDate) : "未設定"}</p>
-    <p><strong>備註：</strong>${record.note || "未設定"}</p>
+    <p><strong>備註：</strong>${displayValue(record.note)}</p>
   `;
 
   for (const [key, value] of Object.entries(record)) {
     const input = recordForm.elements[key];
     if (input) input.value = value;
+  }
+}
+
+function buildWarrantyInfo(record = {}) {
+  const amountText = formatAmount(record.totalAmount);
+  const field = (label, value) => `${label}：${hasText(value) ? String(value).trim() : "未設定"}`;
+  return [
+    "申悅保固信息",
+    field("車主姓名", record.owner),
+    field("聯繫電話", record.phone),
+    field("車牌號碼", record.plate),
+    field("車款年份", record.car),
+    field("安裝項目", record.items),
+    field("主機規格", record.model || record.productSpec),
+    field("總金額", amountText),
+    field("安裝日期", record.installDate ? formatDate(record.installDate) : ""),
+    field("保固到期日", record.warrantyDate ? formatDate(record.warrantyDate) : ""),
+    field("備註", record.note)
+  ].join("\n");
+}
+
+async function copyWarrantyInfo() {
+  const data = cleanWarrantyRecord(Object.fromEntries(new FormData(recordForm).entries()));
+  try {
+    await copyText(buildWarrantyInfo(data));
+    cloudStatus.textContent = "已複製保固信息，可貼到 LINE、備忘錄或客戶紀錄。";
+  } catch (error) {
+    cloudStatus.textContent = `複製失敗：${error.message}`;
   }
 }
 
@@ -917,6 +992,8 @@ recordForm.addEventListener("submit", (event) => {
 });
 
 document.querySelector("[data-save-upload-warranty]").addEventListener("click", saveAndUploadWarranty);
+
+document.querySelector("[data-copy-warranty]").addEventListener("click", copyWarrantyInfo);
 
 document.querySelector("[data-clear-warranty]").addEventListener("click", () => {
   localStorage.removeItem(storageKey);
