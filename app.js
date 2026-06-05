@@ -20,7 +20,8 @@ const checklistKey = "shenYueDeliveryChecklist";
 const adminKey = "shenYueAdminSettings";
 const updateUrlKey = "shenYueUpdateManifestUrl";
 const adminPin = "7708";
-const defaultCloudEndpoint = "https://script.google.com/macros/s/AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz/exec";
+const defaultCloudDeploymentId = "AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz";
+const defaultCloudEndpoint = `https://script.google.com/macros/s/${defaultCloudDeploymentId}/exec`;
 const defaultContentConfigUrl = "https://shen-yue.com.tw/shen-yue-assistant-content.json";
 const legacyUpdateManifestUrl = "https://sylong7708.github.io/shen-yue-iphone-assistant/updates.json";
 const defaultUpdateManifestUrl = "https://raw.githubusercontent.com/SYLONG7708/update/main/updates.json";
@@ -112,6 +113,8 @@ function normalizeLineId(value) {
 function normalizeCloudEndpoint(value) {
   const text = String(value || "").trim();
   if (!text || legacyCloudEndpoints.has(text)) return defaultCloudEndpoint;
+  if (text.includes(defaultCloudDeploymentId)) return defaultCloudEndpoint;
+  if (text.includes("script.google.com/macros/s/")) return defaultCloudEndpoint;
   return text;
 }
 

@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v210-warranty-copy-amount";
+const cacheName = "shen-yue-assistant-v211-fixed-cloud-endpoint";
 const assets = [
   "./",
   "./index.html",
