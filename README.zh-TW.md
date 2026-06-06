@@ -2,9 +2,9 @@
 
 ## 本次版本
 
-- 版本：1.0.4
-- 重點：新增雲端版 APK，載入 GitHub Pages 線上內容。
-- 支援：修改 GitHub Pages、Apps Script 或雲端 JSON 資料後，使用者不必重新安裝 APK。
+- 版本：1.0.5
+- 重點：新增 APK 版，直接載入 APK 內建內容，不載入 GitHub Pages 網頁。
+- 支援：套件名維持 `tw.com.shenyue.assistant`，可覆蓋更新原本雲端版 App。
 
 ## 更新中心上傳
 
@@ -18,18 +18,18 @@
 建置輸出位於：
 
 ```text
-releases/1.0.4-cloud-update/
+releases/1.0.5-apk-packaged/
 ```
 
-- `shen-yue-assistant-1.0.4-cloud-update-debug.apk`
+- `shen-yue-assistant-1.0.5-apk-debug.apk`
   - 套件名：`tw.com.shenyue.assistant`
-  - 會載入 GitHub Pages 線上網頁，適合雲端更新資料後不重裝 APK。
-  - 可覆蓋更新原本安裝的 GitHub 版 App。
+  - 直接載入 APK 內建內容，不載入 GitHub Pages 網址。
+  - 可覆蓋更新原本安裝的雲端版 App。
 
 ## 本機建置
 
 ```powershell
 $env:ANDROID_HOME='C:\Users\Administrator\Android\Sdk'
 $env:ANDROID_SDK_ROOT='C:\Users\Administrator\Android\Sdk'
-C:\Users\Administrator\shen-yue-iphone-assistant\.tools\gradle-9.1.0\bin\gradle.bat --no-daemon :app:assembleGithubDebug
+C:\Users\Administrator\shen-yue-iphone-assistant\.tools\gradle-9.1.0\bin\gradle.bat --no-daemon :app:assembleApkDebug
 ```

@@ -44,8 +44,8 @@ android {
         applicationId "tw.com.shenyue.assistant"
         minSdk 23
         targetSdk 36
-        versionCode 104
-        versionName "1.0.4"
+        versionCode 105
+        versionName "1.0.5"
     }
 
     flavorDimensions "content"
@@ -59,6 +59,13 @@ android {
             buildConfigField "String", "HOME_URL", "\"file:///android_asset/www/index.html\""
         }
 
+        apk {
+            dimension "content"
+            versionNameSuffix "-apk"
+            resValue "string", "app_name", "申悅車機助手 APK版"
+            buildConfigField "String", "HOME_URL", "\"file:///android_asset/www/index.html\""
+        }
+
         github {
             dimension "content"
             versionNameSuffix "-cloud"
@@ -69,6 +76,10 @@ android {
 
     sourceSets {
         builtIn {
+            assets.srcDirs = [generatedWebAssetsDir]
+        }
+
+        apk {
             assets.srcDirs = [generatedWebAssetsDir]
         }
     }

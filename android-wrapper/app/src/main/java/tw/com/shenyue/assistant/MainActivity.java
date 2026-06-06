@@ -38,7 +38,7 @@ public class MainActivity extends Activity {
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/1.0.4");
+        settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/1.0.5");
 
         if (BuildConfig.HOME_URL.startsWith("https://")) {
             settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
