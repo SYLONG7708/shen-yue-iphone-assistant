@@ -38,7 +38,12 @@ public class MainActivity extends Activity {
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/1.0.3");
+        settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/1.0.4");
+
+        if (BuildConfig.HOME_URL.startsWith("https://")) {
+            settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+            webView.clearCache(false);
+        }
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override

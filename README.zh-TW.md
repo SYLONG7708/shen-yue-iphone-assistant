@@ -2,9 +2,9 @@
 
 ## 本次版本
 
-- 版本：1.0.3
-- 重點：更新中心新增與修改需要管理 PIN，且不再顯示預設密碼提示。
-- 支援：修改 APK 名稱、圖標與圖片可先儲存在本機正式清單，暫不送雲端。
+- 版本：1.0.4
+- 重點：新增雲端版 APK，載入 GitHub Pages 線上內容。
+- 支援：修改 GitHub Pages、Apps Script 或雲端 JSON 資料後，使用者不必重新安裝 APK。
 
 ## 更新中心上傳
 
@@ -18,23 +18,18 @@
 建置輸出位於：
 
 ```text
-releases/1.0.3-pin-update-editor/
+releases/1.0.4-cloud-update/
 ```
 
-- `shen-yue-assistant-1.0.3-github-debug.apk`
+- `shen-yue-assistant-1.0.4-cloud-update-debug.apk`
   - 套件名：`tw.com.shenyue.assistant`
-  - 會載入 GitHub Pages 線上網頁。
-  - 適合更新原本安裝的 GitHub 版 App。
-
-- `shen-yue-assistant-1.0.3-builtin-debug.apk`
-  - 套件名：`tw.com.shenyue.assistant.builtin`
-  - 內建網頁與圖片資源。
-  - 會和 GitHub 版分開安裝。
+  - 會載入 GitHub Pages 線上網頁，適合雲端更新資料後不重裝 APK。
+  - 可覆蓋更新原本安裝的 GitHub 版 App。
 
 ## 本機建置
 
 ```powershell
 $env:ANDROID_HOME='C:\Users\Administrator\Android\Sdk'
 $env:ANDROID_SDK_ROOT='C:\Users\Administrator\Android\Sdk'
-C:\Users\Administrator\shen-yue-iphone-assistant\.tools\gradle-9.1.0\bin\gradle.bat --no-daemon :app:assembleGithubDebug :app:assembleBuiltInDebug
+C:\Users\Administrator\shen-yue-iphone-assistant\.tools\gradle-9.1.0\bin\gradle.bat --no-daemon :app:assembleGithubDebug
 ```
