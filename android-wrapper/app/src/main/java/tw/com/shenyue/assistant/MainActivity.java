@@ -38,7 +38,7 @@ public class MainActivity extends Activity {
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/1.0.2");
+        settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/1.0.3");
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
