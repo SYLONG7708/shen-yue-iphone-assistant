@@ -4,9 +4,11 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.ServiceWorkerController;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -17,6 +19,7 @@ public class MainActivity extends Activity {
     private WebView webView;
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
+    private long lastCloudRefresh = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,11 +41,10 @@ public class MainActivity extends Activity {
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/1.0.5");
+        settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/1.0.6");
 
         if (BuildConfig.HOME_URL.startsWith("https://")) {
-            settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-            webView.clearCache(false);
+            configureLiveCloudLoading(settings);
         }
 
         webView.setWebChromeClient(new WebChromeClient() {
@@ -71,26 +73,35 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return handleUrl(request.getUrl().toString());
+                return handleUrl(view, request.getUrl().toString());
             }
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                return handleUrl(url);
+                return handleUrl(view, url);
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                clearWebPageCaches(view);
             }
         });
 
-        webView.loadUrl(BuildConfig.HOME_URL);
+        loadHomePage();
     }
 
-    private boolean handleUrl(String url) {
+    private boolean handleUrl(WebView view, String url) {
         if (url == null) return false;
         Uri uri = Uri.parse(url);
         String scheme = uri.getScheme();
         String host = uri.getHost();
 
         if ("file".equals(scheme)) return false;
-        if ("https".equals(scheme) && "sylong7708.github.io".equals(host)) return false;
+        if ("https".equals(scheme) && "sylong7708.github.io".equals(host)) {
+            view.loadUrl(withCacheBuster(url));
+            return true;
+        }
         if ("https".equals(scheme) && isInlineVideoHost(host)) return false;
 
         try {
@@ -99,6 +110,55 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    private void configureLiveCloudLoading(WebSettings settings) {
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        webView.clearCache(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            ServiceWorkerController.getInstance()
+                    .getServiceWorkerWebSettings()
+                    .setCacheMode(WebSettings.LOAD_NO_CACHE);
+        }
+    }
+
+    private void loadHomePage() {
+        if (BuildConfig.HOME_URL.startsWith("https://")) {
+            lastCloudRefresh = System.currentTimeMillis();
+            webView.clearCache(true);
+            webView.loadUrl(withCacheBuster(BuildConfig.HOME_URL));
+            return;
+        }
+        webView.loadUrl(BuildConfig.HOME_URL);
+    }
+
+    private String withCacheBuster(String url) {
+        if (url == null || !url.startsWith("https://")) return url;
+        return Uri.parse(url)
+                .buildUpon()
+                .appendQueryParameter("_apk_live", String.valueOf(System.currentTimeMillis()))
+                .build()
+                .toString();
+    }
+
+    private void clearWebPageCaches(WebView view) {
+        if (!BuildConfig.HOME_URL.startsWith("https://") || Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
+            return;
+        }
+
+        view.evaluateJavascript(
+                "(async()=>{try{"
+                        + "if('serviceWorker' in navigator){"
+                        + "const regs=await navigator.serviceWorker.getRegistrations();"
+                        + "for(const reg of regs){await reg.unregister();}"
+                        + "}"
+                        + "if(window.caches){"
+                        + "const keys=await caches.keys();"
+                        + "for(const key of keys){await caches.delete(key);}"
+                        + "}"
+                        + "}catch(e){}})();",
+                null
+        );
     }
 
     private boolean isInlineVideoHost(String host) {
@@ -138,5 +198,17 @@ public class MainActivity extends Activity {
             return;
         }
         super.onBackPressed();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (
+                webView != null
+                        && BuildConfig.HOME_URL.startsWith("https://")
+                        && System.currentTimeMillis() - lastCloudRefresh > 1200
+        ) {
+            loadHomePage();
+        }
     }
 }
