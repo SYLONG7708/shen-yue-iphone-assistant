@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v211-fixed-cloud-endpoint";
+const cacheName = "shen-yue-assistant-v213-pin-protected-update-editor";
 const assets = [
   "./",
   "./index.html",

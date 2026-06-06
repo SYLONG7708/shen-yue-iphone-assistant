@@ -124,7 +124,7 @@
         <label>總金額<input name="totalAmount" type="number" inputmode="numeric" min="0" step="1" placeholder="例如 25000"></label>
         <label class="record-note">備註<textarea name="note" placeholder="補充說明、主機序號、保固範圍或特殊狀況"></textarea></label>
         <div class="record-actions">
-          <button type="button" data-copy-warranty>複製保固信息</button>
+          <button type="button" data-copy-warranty>複製保固資訊</button>
           <button class="secondary-button" type="button" data-save-upload-warranty>儲存並直接上傳</button>
         </div>
       </form>
@@ -134,7 +134,7 @@
       </article>
       <div class="cloud-actions">
         <button type="button" data-clear-warranty>清除保固資料</button>
-        <p data-cloud-status>已設定申悅雲端網址，可上傳保固資料。</p>
+        <p data-cloud-status>已設定申悅雲端網址，可上傳保固資料與更新中心資料。</p>
       </div>
     </section>
 
@@ -148,17 +148,95 @@
       </div>
       <div class="update-toolbar">
         <label hidden>雲端更新清單 JSON
-          <input type="url" data-update-url value="https://raw.githubusercontent.com/SYLONG7708/update/main/updates.json">
+          <input type="url" data-update-url value="https://script.google.com/macros/s/AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz/exec?type=updates">
         </label>
         <div class="update-actions">
           <button type="button" data-refresh-updates>重新整理</button>
           <button class="secondary-button" type="button" data-open-install-permission>安裝權限</button>
         </div>
       </div>
+      <section class="update-upload-card" aria-labelledby="update-upload-title">
+        <div class="update-upload-head">
+          <div>
+            <p>Local Edit</p>
+            <h3 id="update-upload-title">更新中心正式版修改</h3>
+          </div>
+          <span>正式版先儲存在本機，不上傳雲端；修改名稱與圖片會立即套用，並沿用原本 APK 下載網址。</span>
+        </div>
+        <form class="update-upload-form" data-update-upload-form>
+          <input type="hidden" name="manifestId" data-update-edit-id>
+
+          <label for="update-upload-icon">應用圖標</label>
+          <div class="update-upload-field">
+            <input id="update-upload-icon" name="iconUrl" type="text" placeholder="可填圖片網址，或使用右側圖片上傳">
+            <label class="upload-button">圖片上傳<input name="iconFile" type="file" accept="image/*"></label>
+          </div>
+
+          <label for="update-upload-name">應用名稱</label>
+          <input id="update-upload-name" name="appName" type="text" placeholder="可留空，建議輸入應用名稱">
+
+          <label for="update-upload-category">類別名稱</label>
+          <select id="update-upload-category" name="category">
+            <option value="">未分類 / 其他應用</option>
+            <option>影音播放</option>
+            <option>導航地圖</option>
+            <option>輸入法</option>
+            <option>車機輔助</option>
+            <option>系統工具</option>
+            <option>必備應用</option>
+            <option>其他應用</option>
+          </select>
+
+          <label for="update-upload-description">應用介紹</label>
+          <textarea id="update-upload-description" name="description" placeholder="可留空，建議輸入應用介紹、用途或更新說明"></textarea>
+
+          <label for="update-upload-first-image">第一張圖片</label>
+          <div class="update-upload-field">
+            <input id="update-upload-first-image" name="firstImageUrl" type="text" placeholder="可填圖片網址，或使用右側圖片上傳">
+            <label class="upload-button">圖片上傳<input name="firstImageFile" type="file" accept="image/*"></label>
+          </div>
+
+          <label for="update-upload-second-image">第二張圖片</label>
+          <div class="update-upload-field">
+            <input id="update-upload-second-image" name="secondImageUrl" type="text" placeholder="可填圖片網址，或使用右側圖片上傳">
+            <label class="upload-button">圖片上傳<input name="secondImageFile" type="file" accept="image/*"></label>
+          </div>
+
+          <label for="update-upload-apk">應用下載地址</label>
+          <div class="update-upload-field">
+            <input id="update-upload-apk" name="apkUrl" type="text" placeholder="貼 APK 直接下載地址；大檔請先放免費空間">
+            <label class="upload-button">APK 上傳<input name="apkFile" type="file" accept=".apk,application/vnd.android.package-archive"></label>
+          </div>
+          <p class="update-upload-hint">修改既有 App 時可只改名稱，不用重新填 APK 網址；新增 App 時才需要下載地址或小型 APK 檔案。</p>
+
+          <label for="update-upload-size">App 容量</label>
+          <input id="update-upload-size" name="sizeLabel" type="text" placeholder="請輸入大小，例如 41.6 MB">
+
+          <details class="update-upload-extra">
+            <summary>進階更新資訊</summary>
+            <div>
+              <label>套件名稱<input name="packageName" type="text" placeholder="例如 com.example.app"></label>
+              <label>版本名稱<input name="versionName" type="text" placeholder="例如 1.0.0"></label>
+              <label>版本碼<input name="versionCode" type="number" inputmode="numeric" min="0" step="1" placeholder="例如 100"></label>
+              <label>最低 Android<input name="minAndroid" type="text" placeholder="依 APK 設定"></label>
+              <label>目標 SDK<input name="targetSdk" type="number" inputmode="numeric" min="1" step="1" placeholder="例如 35"></label>
+              <label>SHA-256<input name="sha256" type="text" placeholder="可留空"></label>
+            </div>
+          </details>
+
+          <div class="update-upload-actions">
+            <button type="submit" data-save-update-upload>儲存新增</button>
+            <button class="secondary-button" type="button" data-update-new>新增空白</button>
+            <button class="secondary-button" type="reset">清除表格</button>
+          </div>
+          <p class="update-upload-status" data-update-upload-status>目前只儲存到本機正式清單，先不送雲端。</p>
+        </form>
+      </section>
       <div class="update-status" data-update-status>尚未讀取雲端清單。</div>
       <div class="update-device" data-update-device></div>
       <div class="update-catalog-head">
         <p>點選項目進入單獨頁面，可查看介紹、版本資訊與兩張圖片位置。</p>
+        <button class="secondary-button" type="button" data-update-new>新增應用</button>
       </div>
       <div class="update-list" data-update-list></div>
       <section class="update-detail-view" data-update-detail hidden></section>
@@ -170,7 +248,7 @@
         <h2>管理員設定</h2>
       </div>
       <div class="admin-lock" data-admin-lock>
-        <label>管理 PIN<input type="password" data-admin-pin placeholder="預設 7708"></label>
+        <label>管理 PIN<input type="password" data-admin-pin placeholder="請輸入管理 PIN"></label>
         <button type="button" data-admin-login>進入管理模式</button>
         <p>管理模式可設定雲端網址、測試連線、匯出本機資料。</p>
       </div>

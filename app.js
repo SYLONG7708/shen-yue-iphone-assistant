@@ -14,17 +14,25 @@ const updateStatus = document.querySelector("[data-update-status]");
 const updateDevice = document.querySelector("[data-update-device]");
 const updateList = document.querySelector("[data-update-list]");
 const updateDetail = document.querySelector("[data-update-detail]");
+const updateUploadForm = document.querySelector("[data-update-upload-form]");
+const updateUploadStatus = document.querySelector("[data-update-upload-status]");
 
 const storageKey = "shenYueCarRecord";
 const checklistKey = "shenYueDeliveryChecklist";
 const adminKey = "shenYueAdminSettings";
 const updateUrlKey = "shenYueUpdateManifestUrl";
-const adminPin = "7708";
+const updateUploadKey = "shenYueLastUpdateUpload";
+const localUpdateOverridesKey = "shenYueLocalUpdateOverrides";
+const adminPinHash = "7c5fab57f8c1447f91f98eb3fcea7954e4f704d92686c5fd2e551e34ca88f8a8";
+const fallbackAdminPin = String.fromCharCode(55, 55, 48, 56);
 const defaultCloudDeploymentId = "AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz";
 const defaultCloudEndpoint = `https://script.google.com/macros/s/${defaultCloudDeploymentId}/exec`;
 const defaultContentConfigUrl = "https://shen-yue.com.tw/shen-yue-assistant-content.json";
 const legacyUpdateManifestUrl = "https://sylong7708.github.io/shen-yue-iphone-assistant/updates.json";
-const defaultUpdateManifestUrl = "https://raw.githubusercontent.com/SYLONG7708/update/main/updates.json";
+const fallbackUpdateManifestUrl = "https://raw.githubusercontent.com/SYLONG7708/update/main/updates.json";
+const defaultUpdateManifestUrl = `${defaultCloudEndpoint}?type=updates`;
+const maxInlineImageUploadBytes = 8 * 1024 * 1024;
+const maxInlineApkUploadBytes = 24 * 1024 * 1024;
 const currentLineId = "@585eeefp";
 const legacyLineIds = new Set(["7708LUNG", "@7708LUNG", "7708lung", "@7708lung"]);
 const legacyCloudEndpoints = new Set([
@@ -51,6 +59,8 @@ let currentUpdateItems = [];
 let currentInstalledMap = new Map();
 let currentUpdateManifestUrl = "updates.json";
 let lastFocusedVideoTrigger = null;
+let updateEditorUnlocked = false;
+let adminUnlocked = false;
 
 const defaultContent = {
   heroTitle: "車機教學、保固資料、售後聯絡。",
@@ -231,13 +241,64 @@ async function copyText(text) {
   copyFallback(text);
 }
 
+async function sha256Hex(text) {
+  if (window.crypto?.subtle && window.isSecureContext) {
+    const bytes = new TextEncoder().encode(String(text || ""));
+    const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  let hash = 0;
+  const value = String(text || "");
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(index);
+    hash |= 0;
+  }
+  return String(hash);
+}
+
+async function verifyAdminPin(value) {
+  if (!window.crypto?.subtle || !window.isSecureContext) return String(value || "") === fallbackAdminPin;
+  return await sha256Hex(value) === adminPinHash;
+}
+
+async function requestUpdateEditorAccess(actionLabel = "此操作") {
+  if (updateEditorUnlocked) return true;
+  const value = window.prompt(`${actionLabel}\n請輸入管理 PIN`);
+  if (value === null) return false;
+  const ok = await verifyAdminPin(value);
+  if (ok) {
+    updateEditorUnlocked = true;
+    setUpdateUploadStatus("已通過管理 PIN，可新增或修改更新項目。", "success");
+    return true;
+  }
+  setUpdateUploadStatus("PIN 錯誤，無法新增或修改更新項目。", "error");
+  return false;
+}
+
+function appendQueryParam(url, name, value) {
+  const separator = String(url || "").includes("?") ? "&" : "?";
+  return `${url}${separator}${encodeURIComponent(name)}=${encodeURIComponent(value)}`;
+}
+
+function getCloudUpdateManifestUrl() {
+  const { cloudEndpoint } = getAdminSettings();
+  return appendQueryParam(cloudEndpoint || defaultCloudEndpoint, "type", "updates");
+}
+
 function getPreferredUpdateManifestUrl() {
   const savedUrl = localStorage.getItem(updateUrlKey);
-  if (savedUrl && savedUrl !== legacyUpdateManifestUrl && !savedUrl.includes("shen-yue-iphone-assistant")) {
+  if (
+    savedUrl &&
+    savedUrl !== legacyUpdateManifestUrl &&
+    savedUrl !== fallbackUpdateManifestUrl &&
+    !savedUrl.includes("shen-yue-iphone-assistant")
+  ) {
     return savedUrl;
   }
-  localStorage.setItem(updateUrlKey, defaultUpdateManifestUrl);
-  return defaultUpdateManifestUrl;
+  const cloudManifestUrl = getCloudUpdateManifestUrl();
+  localStorage.setItem(updateUrlKey, cloudManifestUrl);
+  return cloudManifestUrl;
 }
 
 function resolveManifestRelativeUrl(value, fallback = "") {
@@ -331,6 +392,390 @@ async function sendToCloud(payload) {
   });
 }
 
+function setUpdateUploadStatus(message, tone = "") {
+  if (!updateUploadStatus) return;
+  updateUploadStatus.textContent = message;
+  updateUploadStatus.dataset.tone = tone;
+}
+
+function formatFileSize(bytes) {
+  const size = Number(bytes || 0);
+  if (!Number.isFinite(size) || size <= 0) return "";
+  if (size >= 1024 * 1024 * 1024) return `${(size / 1024 / 1024 / 1024).toFixed(2)} GB`;
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  if (size >= 1024) return `${Math.round(size / 1024)} KB`;
+  return `${size} B`;
+}
+
+function getInlineUploadLimit(kind) {
+  return kind === "apk" ? maxInlineApkUploadBytes : maxInlineImageUploadBytes;
+}
+
+function assertInlineUploadSize(file, kind) {
+  if (!file || !file.name) return;
+  const limit = getInlineUploadLimit(kind);
+  if (Number(file.size || 0) <= limit) return;
+
+  const limitLabel = formatFileSize(limit);
+  const fileLabel = formatFileSize(file.size);
+  if (kind === "apk") {
+    throw new Error(`APK 檔案 ${fileLabel} 太大，請先上傳到 GitHub Releases、Google Drive 或其他免費空間，再把直接下載網址貼到「應用下載地址」。本表格只直接上傳 ${limitLabel} 以下的小 APK。`);
+  }
+  throw new Error(`圖片檔案 ${fileLabel} 太大，請壓縮圖片或改貼圖片網址。本表格只直接上傳 ${limitLabel} 以下的圖片。`);
+}
+
+function readUploadFile(file, kind = "image") {
+  if (!file || !file.name) return Promise.resolve(null);
+  assertInlineUploadSize(file, kind);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      resolve({
+        name: file.name,
+        type: file.type || "application/octet-stream",
+        size: file.size || 0,
+        sizeLabel: formatFileSize(file.size),
+        dataUrl: String(reader.result || "")
+      });
+    });
+    reader.addEventListener("error", () => reject(new Error(`讀取檔案失敗：${file.name}`)));
+    reader.readAsDataURL(file);
+  });
+}
+
+function getUpdateUploadData() {
+  const data = {};
+  const formData = new FormData(updateUploadForm);
+  formData.forEach((value, key) => {
+    if (typeof File !== "undefined" && value instanceof File) return;
+    data[key] = String(value ?? "").trim();
+  });
+  return data;
+}
+
+function normalizeUpdateItemId(value) {
+  const source = String(value || "shen-yue-app").trim();
+  const text = source.toLowerCase();
+  const normalized = text
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  if (normalized) return normalized;
+
+  let hash = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    hash = ((hash << 5) - hash) + source.charCodeAt(index);
+    hash |= 0;
+  }
+  return `shen-yue-app-${Math.abs(hash).toString(36)}`;
+}
+
+function getFallbackUpdateName(data = {}) {
+  const rawUrl = String(data.apkUrl || "").trim();
+  if (!rawUrl) return "未命名 APK";
+
+  try {
+    const parsed = new URL(rawUrl, location.href);
+    const lastSegment = decodeURIComponent(parsed.pathname.split("/").filter(Boolean).pop() || "");
+    return lastSegment.replace(/\.apk$/i, "") || "未命名 APK";
+  } catch {
+    const lastSegment = rawUrl.split(/[/?#]/).filter(Boolean).pop() || "";
+    return lastSegment.replace(/\.apk$/i, "") || "未命名 APK";
+  }
+}
+
+function buildUpdateManifestItem(data = {}, files = {}) {
+  const galleryImages = [
+    files.firstImage?.dataUrl || data.firstImageUrl || "",
+    files.secondImage?.dataUrl || data.secondImageUrl || ""
+  ].filter(Boolean);
+  const versionCode = Number(data.versionCode || 0);
+
+  return {
+    id: data.manifestId || normalizeUpdateItemId(data.packageName || data.appName || data.apkUrl),
+    name: data.appName || getFallbackUpdateName(data),
+    category: data.category || "其他應用",
+    packageName: data.packageName || "",
+    versionCode: Number.isFinite(versionCode) ? versionCode : 0,
+    versionName: data.versionName || "未標示",
+    minAndroid: data.minAndroid || "依 APK 設定",
+    targetSdk: data.targetSdk || "",
+    sizeLabel: data.sizeLabel || files.apk?.sizeLabel || "",
+    apkUrl: files.apk?.dataUrl || data.apkUrl || "",
+    sha256: data.sha256 || "",
+    imageUrl: galleryImages[0] || "assets/update-splash.png",
+    iconUrl: files.icon?.dataUrl || data.iconUrl || "assets/app-logo.png",
+    galleryImages,
+    description: data.description || "此 APK 尚未填寫介紹。",
+    changelog: [
+      "已由更新中心上傳表格新增",
+      data.category ? `分類：${data.category}` : "",
+      "可在車機內下載安裝"
+    ].filter(Boolean)
+  };
+}
+
+function getExistingUploadItem(data = {}) {
+  const manifestId = String(data.manifestId || "").trim();
+  if (!manifestId) return null;
+  return currentUpdateItems.find((item) => item.id === manifestId) || null;
+}
+
+function getUpdateItemKey(item = {}) {
+  return String(item.id || item.packageName || normalizeUpdateItemId(item.name || item.apkUrl || "shen-yue-app")).trim();
+}
+
+function getLocalUpdateOverrides() {
+  try {
+    const items = JSON.parse(localStorage.getItem(localUpdateOverridesKey) || "[]");
+    return Array.isArray(items) ? items.filter(Boolean) : [];
+  } catch {
+    localStorage.removeItem(localUpdateOverridesKey);
+    return [];
+  }
+}
+
+function mergeUpdateOverrides(items = []) {
+  const overrides = getLocalUpdateOverrides();
+  if (!overrides.length) return items;
+
+  const result = [];
+  const seen = new Set();
+  overrides.concat(items).forEach((item) => {
+    if (!item) return;
+    const key = getUpdateItemKey(item);
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(item);
+  });
+  return result;
+}
+
+function saveLocalUpdateOverride(item) {
+  if (!item) return;
+  const key = getUpdateItemKey(item);
+  const nextItems = [
+    item,
+    ...getLocalUpdateOverrides().filter((existing) => getUpdateItemKey(existing) !== key)
+  ];
+  localStorage.setItem(localUpdateOverridesKey, JSON.stringify(nextItems));
+}
+
+function mergeExistingUploadData(data = {}, existingItem = null) {
+  if (!existingItem) return { ...data };
+  const galleryImages = Array.isArray(existingItem.galleryImages) ? existingItem.galleryImages : [];
+  return {
+    manifestId: data.manifestId || existingItem.id || "",
+    iconUrl: data.iconUrl || existingItem.iconUrl || "",
+    appName: data.appName || existingItem.name || "",
+    category: data.category || existingItem.category || "",
+    description: data.description || existingItem.description || existingItem.introduction || existingItem.note || "",
+    firstImageUrl: data.firstImageUrl || galleryImages[0] || existingItem.imageUrl || "",
+    secondImageUrl: data.secondImageUrl || galleryImages[1] || "",
+    apkUrl: data.apkUrl || existingItem.apkUrl || "",
+    sizeLabel: data.sizeLabel || existingItem.sizeLabel || existingItem.size || "",
+    packageName: data.packageName || existingItem.packageName || "",
+    versionName: data.versionName || existingItem.versionName || "",
+    versionCode: data.versionCode || existingItem.versionCode || "",
+    minAndroid: data.minAndroid || existingItem.minAndroid || "",
+    targetSdk: data.targetSdk || existingItem.targetSdk || "",
+    sha256: data.sha256 || existingItem.sha256 || "",
+    note: data.note || existingItem.note || ""
+  };
+}
+
+function renderUploadedUpdatePreview(item) {
+  if (!item || !updateList) return;
+  const key = getUpdateItemKey(item);
+  const nextItems = [
+    item,
+    ...currentUpdateItems.filter((existing) => getUpdateItemKey(existing) !== key)
+  ];
+  renderUpdateItems(nextItems);
+  if (updateStatus) {
+    updateStatus.textContent = "本機修改已套用到目前畫面；重新整理後仍會優先顯示本機修改版。";
+  }
+}
+
+async function saveAndUploadUpdateApp() {
+  if (!updateUploadForm) return;
+  if (!updateUploadForm.checkValidity()) {
+    updateUploadForm.reportValidity();
+    return;
+  }
+
+  const data = getUpdateUploadData();
+  const apkInput = updateUploadForm.elements.apkFile;
+  const apkFile = apkInput?.files?.[0] || null;
+  const submitButton = updateUploadForm.querySelector("[data-save-update-upload]");
+  const isEditMode = Boolean(data.manifestId);
+  const existingItem = getExistingUploadItem(data);
+  const mergedData = mergeExistingUploadData(data, existingItem);
+
+  if (!await requestUpdateEditorAccess(isEditMode ? "儲存修改" : "儲存新增")) return;
+
+  if (!isEditMode && !mergedData.apkUrl && !apkFile) {
+    setUpdateUploadStatus("新增 App 才需要 APK 下載地址或小型 APK 檔案。若只是改 APK 名稱，請先點下方 App 項目，再按「修改資料」。", "error");
+    return;
+  }
+
+  if (submitButton) submitButton.disabled = true;
+  const workingText = mergedData.apkUrl
+    ? "正在儲存下載網址與更新資料..."
+    : isEditMode
+      ? "正在儲存修改資料，並沿用原本的 APK 下載網址..."
+      : "正在讀取小型檔案並儲存到本機正式清單...";
+  setUpdateUploadStatus(workingText, "working");
+
+  try {
+    if (!mergedData.appName && apkFile?.name) {
+      mergedData.appName = apkFile.name.replace(/\.apk$/i, "");
+      updateUploadForm.elements.appName.value = mergedData.appName;
+    }
+    if (!mergedData.sizeLabel && apkFile?.size) {
+      mergedData.sizeLabel = formatFileSize(apkFile.size);
+      updateUploadForm.elements.sizeLabel.value = mergedData.sizeLabel;
+    }
+
+    const files = {
+      icon: await readUploadFile(updateUploadForm.elements.iconFile?.files?.[0], "image"),
+      firstImage: await readUploadFile(updateUploadForm.elements.firstImageFile?.files?.[0], "image"),
+      secondImage: await readUploadFile(updateUploadForm.elements.secondImageFile?.files?.[0], "image"),
+      apk: mergedData.apkUrl ? null : await readUploadFile(apkFile, "apk")
+    };
+
+    if (!mergedData.sizeLabel && files.apk?.sizeLabel) {
+      mergedData.sizeLabel = files.apk.sizeLabel;
+      updateUploadForm.elements.sizeLabel.value = mergedData.sizeLabel;
+    }
+
+    const localManifestItem = buildUpdateManifestItem(mergedData, files);
+    saveLocalUpdateOverride(localManifestItem);
+
+    localStorage.setItem(updateUploadKey, JSON.stringify({
+      createdAt: new Date().toISOString(),
+      updateApp: mergedData,
+      manifestItem: localManifestItem
+    }));
+    renderUploadedUpdatePreview(localManifestItem);
+    const actionText = isEditMode ? "修改" : "新增";
+    const apkText = mergedData.apkUrl
+      ? "已沿用 APK 下載網址，沒有上傳右側 APK 檔案。"
+      : isEditMode
+        ? "本機正式清單會沿用同一筆 App 原本的 APK 下載網址。"
+        : "小型 APK 檔案已暫存到本機正式清單。";
+    setUpdateUploadStatus(`已儲存${actionText}資料到本機正式版，尚未上傳雲端。${apkText}`, "success");
+  } catch (error) {
+    setUpdateUploadStatus(`儲存失敗：${error.message || error}`, "error");
+  } finally {
+    if (submitButton) submitButton.disabled = false;
+  }
+}
+
+function syncUpdateUploadFileLabels() {
+  if (!updateUploadForm) return;
+  updateUploadForm.querySelectorAll(".upload-button input[type='file']").forEach((input) => {
+    const label = input.closest(".upload-button");
+    if (!label) return;
+    label.dataset.defaultLabel = label.dataset.defaultLabel || label.textContent.trim();
+    const updateLabel = () => {
+      const file = input.files?.[0];
+      const textNode = [...label.childNodes].find((node) => node.nodeType === Node.TEXT_NODE);
+      if (textNode) textNode.textContent = file ? "已選檔案" : label.dataset.defaultLabel;
+      label.title = file?.name || "";
+      if (file && input.name === "apkFile") {
+        const hasApkUrl = hasText(updateUploadForm.elements.apkUrl?.value);
+        if (hasApkUrl) {
+          setUpdateUploadStatus("已填 APK 下載地址，送出時會使用網址並略過右側 APK 檔案。");
+        } else if (file.size > maxInlineApkUploadBytes) {
+          setUpdateUploadStatus(`APK 檔案 ${formatFileSize(file.size)} 太大，請先上傳到免費空間，再把直接下載網址貼到「應用下載地址」。`, "error");
+        }
+      }
+    };
+    if (!input.dataset.labelReady) {
+      input.addEventListener("change", updateLabel);
+      input.dataset.labelReady = "true";
+    }
+    updateLabel();
+  });
+
+  if (!updateUploadForm.dataset.resetReady) {
+    updateUploadForm.addEventListener("reset", () => {
+      const silentReset = updateUploadForm.dataset.silentReset === "true";
+      delete updateUploadForm.dataset.silentReset;
+      window.setTimeout(() => {
+        if (!silentReset) setUpdateUploadMode("new");
+        syncUpdateUploadFileLabels();
+        if (!silentReset) setUpdateUploadStatus("表格已清除，可重新填寫後儲存。");
+      }, 0);
+    });
+    updateUploadForm.dataset.resetReady = "true";
+  }
+}
+
+function setUpdateUploadMode(mode = "new") {
+  if (!updateUploadForm) return;
+  const saveButton = updateUploadForm.querySelector("[data-save-update-upload]");
+  updateUploadForm.dataset.mode = mode;
+  if (saveButton) saveButton.textContent = mode === "edit" ? "儲存修改" : "儲存新增";
+}
+
+function setUpdateUploadField(name, value) {
+  if (!updateUploadForm?.elements[name]) return;
+  const field = updateUploadForm.elements[name];
+  const text = String(value ?? "");
+  if (field.tagName === "SELECT" && text && ![...field.options].some((option) => option.value === text)) {
+    field.add(new Option(text, text));
+  }
+  field.value = text;
+}
+
+function resetUpdateUploadFormForNew() {
+  if (!updateUploadForm) return;
+  updateUploadForm.dataset.silentReset = "true";
+  updateUploadForm.reset();
+  setUpdateUploadMode("new");
+  setUpdateUploadField("manifestId", "");
+  syncUpdateUploadFileLabels();
+  setUpdateUploadStatus("已切換為新增模式。請貼 APK 下載地址，其他欄位可依需要填寫。");
+  updateUploadForm.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function editUpdateUploadItem(index) {
+  if (!updateUploadForm) return;
+  const item = currentUpdateItems[index];
+  if (!item) return;
+
+  updateUploadForm.dataset.silentReset = "true";
+  updateUploadForm.reset();
+  const galleryImages = Array.isArray(item.galleryImages) ? item.galleryImages : [];
+  setUpdateUploadField("manifestId", item.id || normalizeUpdateItemId(item.packageName || item.name || item.apkUrl));
+  setUpdateUploadField("iconUrl", item.iconUrl || "");
+  setUpdateUploadField("appName", item.name || "");
+  setUpdateUploadField("category", item.category || "");
+  setUpdateUploadField("description", item.description || item.introduction || item.note || "");
+  setUpdateUploadField("firstImageUrl", galleryImages[0] || item.imageUrl || "");
+  setUpdateUploadField("secondImageUrl", galleryImages[1] || "");
+  setUpdateUploadField("apkUrl", item.apkUrl || "");
+  setUpdateUploadField("sizeLabel", item.sizeLabel || item.size || "");
+  setUpdateUploadField("packageName", item.packageName || "");
+  setUpdateUploadField("versionName", item.versionName || "");
+  setUpdateUploadField("versionCode", item.versionCode || "");
+  setUpdateUploadField("minAndroid", item.minAndroid || "");
+  setUpdateUploadField("targetSdk", item.targetSdk || "");
+  setUpdateUploadField("sha256", item.sha256 || "");
+
+  const extra = updateUploadForm.querySelector(".update-upload-extra");
+  if (extra && (item.packageName || item.versionName || item.versionCode || item.minAndroid || item.targetSdk || item.sha256)) {
+    extra.open = true;
+  }
+
+  setUpdateUploadMode("edit");
+  syncUpdateUploadFileLabels();
+  setUpdateUploadStatus(`正在修改「${item.name || item.id || "未命名 APK"}」。儲存後本機正式清單會以最新資料顯示。`, "working");
+  updateUploadForm.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function renderEmptyRecord() {
   recordCard.innerHTML = `
     <h3>目前沒有儲存紀錄</h3>
@@ -370,7 +815,7 @@ function buildWarrantyInfo(record = {}) {
   const amountText = formatAmount(record.totalAmount);
   const field = (label, value) => `${label}：${hasText(value) ? String(value).trim() : "未設定"}`;
   return [
-    "申悅保固信息",
+    "申悅保固資訊",
     field("車主姓名", record.owner),
     field("聯繫電話", record.phone),
     field("車牌號碼", record.plate),
@@ -388,7 +833,7 @@ async function copyWarrantyInfo() {
   const data = cleanWarrantyRecord(Object.fromEntries(new FormData(recordForm).entries()));
   try {
     await copyText(buildWarrantyInfo(data));
-    cloudStatus.textContent = "已複製保固信息，可貼到 LINE、備忘錄或客戶紀錄。";
+    cloudStatus.textContent = "已複製保固資訊，可貼到 LINE、備忘錄或客戶紀錄。";
   } catch (error) {
     cloudStatus.textContent = `複製失敗：${error.message}`;
   }
@@ -698,7 +1143,8 @@ async function loadUpdateManifest(force = false) {
     const response = await fetch(`${manifestUrl}${manifestUrl.includes("?") ? "&" : "?"}t=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const manifest = await response.json();
-    const items = Array.isArray(manifest.apps) ? manifest.apps : [];
+    if (!Array.isArray(manifest.apps)) throw new Error("雲端更新清單格式不正確");
+    const items = manifest.apps;
     currentUpdateManifestUrl = manifestUrl;
     updateStatus.textContent = `已讀取 ${items.length} 個更新項目。更新時間：${manifest.updatedAt || "未標示"}`;
     renderUpdateItems(items);
@@ -743,15 +1189,16 @@ function getInstalledMap(items) {
 
 function renderUpdateItems(items) {
   if (!updateList) return;
-  currentUpdateItems = items;
-  if (!items.length) {
+  const displayItems = mergeUpdateOverrides(items);
+  currentUpdateItems = displayItems;
+  if (!displayItems.length) {
     updateList.innerHTML = `<article class="update-card"><h3>沒有可顯示的更新項目</h3><p>請確認 updates.json 的 apps 陣列格式是否正確。</p></article>`;
     if (updateDetail) updateDetail.hidden = true;
     return;
   }
 
-  currentInstalledMap = getInstalledMap(items);
-  updateList.innerHTML = items.map((item, index) => renderUpdateIcon(item, currentInstalledMap.get(item.packageName), index)).join("");
+  currentInstalledMap = getInstalledMap(displayItems);
+  updateList.innerHTML = displayItems.map((item, index) => renderUpdateIcon(item, currentInstalledMap.get(item.packageName), index)).join("");
   if (updateDetail) {
     updateDetail.hidden = true;
     updateDetail.innerHTML = "";
@@ -833,7 +1280,11 @@ function renderUpdateDetailPage(index) {
   updateDetail.hidden = false;
   updateDetail.innerHTML = `
     <div class="update-detail-top">
-      <button class="secondary-button" type="button" data-update-back>返回圖標清單</button>
+      <div class="update-detail-actions">
+        <button class="secondary-button" type="button" data-update-back>返回圖標清單</button>
+        <button class="secondary-button" type="button" data-update-new>新增應用</button>
+        <button class="secondary-button" type="button" data-update-edit="${index}">修改資料</button>
+      </div>
       <span class="status-pill ${state.pillClass}">${state.pill}</span>
     </div>
     <article class="update-card" data-update-card="${index}">
@@ -989,6 +1440,13 @@ async function saveAndUploadWarranty() {
   }
 }
 
+if (updateUploadForm) {
+  updateUploadForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveAndUploadUpdateApp();
+  });
+}
+
 recordForm.addEventListener("submit", (event) => {
   event.preventDefault();
   saveAndUploadWarranty();
@@ -1008,7 +1466,7 @@ document.querySelector("[data-clear-warranty]").addEventListener("click", () => 
   cloudStatus.textContent = "本機保固資料已清除。";
 });
 
-document.addEventListener("click", (event) => {
+document.addEventListener("click", async (event) => {
   const tabButton = event.target.closest("[data-tab-target]");
   if (tabButton) {
     switchTab(tabButton.dataset.tabTarget);
@@ -1018,6 +1476,20 @@ document.addEventListener("click", (event) => {
   const refreshUpdates = event.target.closest("[data-refresh-updates]");
   if (refreshUpdates) {
     initUpdateCenter(true);
+    return;
+  }
+
+  const updateNew = event.target.closest("[data-update-new]");
+  if (updateNew) {
+    if (!await requestUpdateEditorAccess("新增更新項目")) return;
+    resetUpdateUploadFormForNew();
+    return;
+  }
+
+  const updateEdit = event.target.closest("[data-update-edit]");
+  if (updateEdit) {
+    if (!await requestUpdateEditorAccess("修改更新項目")) return;
+    editUpdateUploadItem(Number(updateEdit.dataset.updateEdit));
     return;
   }
 
@@ -1118,17 +1590,19 @@ document.querySelector("[data-reset-checklist]")?.addEventListener("click", () =
 adminShortcut.addEventListener("click", () => {
   switchTab("admin");
   const input = document.querySelector("[data-admin-pin]");
+  input.placeholder = "請輸入管理 PIN";
   input.focus();
 });
 
-document.querySelector("[data-admin-login]").addEventListener("click", () => {
+document.querySelector("[data-admin-login]").addEventListener("click", async () => {
   const input = document.querySelector("[data-admin-pin]");
-  if (input.value !== adminPin) {
+  if (!await verifyAdminPin(input.value)) {
     input.value = "";
     input.placeholder = "PIN 錯誤";
     return;
   }
 
+  adminUnlocked = true;
   adminPanel.hidden = false;
   const settings = getAdminSettings();
   const form = document.querySelector("[data-admin-form]");
@@ -1148,7 +1622,10 @@ document.querySelector("[data-admin-form]").addEventListener("submit", (event) =
   localStorage.setItem(adminKey, JSON.stringify(data));
   applyContent({ heroTitle: data.heroTitle });
   adminOutput.textContent = `已儲存管理設定：\n${JSON.stringify(data, null, 2)}`;
-  cloudStatus.textContent = "已設定雲端網址，可上傳保固資料。";
+  const updateManifestUrl = getCloudUpdateManifestUrl();
+  localStorage.setItem(updateUrlKey, updateManifestUrl);
+  if (updateUrlInput) updateUrlInput.value = updateManifestUrl;
+  cloudStatus.textContent = "已設定雲端網址，可上傳保固資料與更新中心資料。";
 });
 
 document.querySelector("[data-load-content]").addEventListener("click", () => {
@@ -1203,6 +1680,7 @@ migrateLegacyData();
 renderRecord();
 restoreChecklist();
 renderVideos();
+syncUpdateUploadFileLabels();
 if (updateUrlInput) {
   updateUrlInput.value = getPreferredUpdateManifestUrl();
 }
@@ -1210,4 +1688,4 @@ if (location.hash === "#updates") {
   switchTab("updates");
 }
 checkRemoteContentNow();
-cloudStatus.textContent = "已設定申悅雲端網址，可上傳保固資料。";
+cloudStatus.textContent = "已設定申悅雲端網址，可上傳保固資料與更新中心資料。";

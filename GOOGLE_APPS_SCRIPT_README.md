@@ -17,4 +17,15 @@ https://script.google.com/macros/s/AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM
 
 若 Google 試算表欄位沒有即時變成新版，代表 Apps Script 線上部署仍是舊版；請把本專案 `Code.gs` 完整貼到 Apps Script，按「部署」>「管理部署作業」>「編輯」>「版本」選「新增版本」後重新部署。
 
-工作表會自動建立 `保固上傳`，欄位採橫向顯示，並自動加大欄寬、列高與換行，避免內容被遮住。
+工作表會自動建立：
+
+- `保固上傳`：保存保固登錄資料，欄位採橫向顯示，並自動加大欄寬、列高與換行，避免內容被遮住。
+- `更新中心上傳`：保存 APK、圖標、圖片、分類、介紹與更新清單 JSON。
+
+若更新中心表格有選擇圖片或 APK 檔案，Apps Script 會自動建立 Google Drive 資料夾 `申悅更新中心上傳` 並保存檔案。更新中心前端會讀取同一個 Apps Script 的 `?type=updates`，例如：
+
+```text
+https://script.google.com/macros/s/你的部署ID/exec?type=updates
+```
+
+若雲端清單暫時無法讀取，App 會退回內建 `updates.json`。

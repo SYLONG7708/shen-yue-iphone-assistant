@@ -197,11 +197,18 @@ h3 {
   display: grid;
   grid-template-columns: repeat(6, minmax(90px, 1fr));
   gap: 8px;
+  max-width: 100%;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
   padding: 10px clamp(10px, 3vw, 28px);
   background: rgba(5, 10, 16, 0.88);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(20px);
+}
+
+.tab-bar::-webkit-scrollbar {
+  display: none;
 }
 
 .tab-bar button {
@@ -268,6 +275,7 @@ h3 {
 .video-card,
 .record-card,
 .update-toolbar,
+.update-upload-card,
 .update-status,
 .update-device,
 .update-icon-card,
@@ -377,6 +385,9 @@ h3 {
 .record-form input,
 .record-form select,
 .record-form textarea,
+.update-upload-form input,
+.update-upload-form select,
+.update-upload-form textarea,
 .admin-lock input,
 .admin-form input {
   width: 100%;
@@ -390,7 +401,10 @@ h3 {
 
 .record-form input,
 .record-form select,
-.record-form textarea {
+.record-form textarea,
+.update-upload-form input,
+.update-upload-form select,
+.update-upload-form textarea {
   min-height: 58px;
   padding: 0 16px;
   color: #071018;
@@ -401,7 +415,8 @@ h3 {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
 }
 
-.record-form textarea {
+.record-form textarea,
+.update-upload-form textarea {
   min-height: 126px;
   padding: 14px 16px;
   line-height: 1.6;
@@ -410,6 +425,9 @@ h3 {
 
 .video-tools input::placeholder,
 .record-form input::placeholder,
+.record-form textarea::placeholder,
+.update-upload-form input::placeholder,
+.update-upload-form textarea::placeholder,
 .admin-lock input::placeholder,
 .admin-form input::placeholder {
   color: #5f6870;
@@ -900,6 +918,147 @@ body.video-modal-open {
   justify-content: flex-end;
 }
 
+.update-upload-card {
+  margin: 18px 0;
+  padding: clamp(16px, 3vw, 24px);
+}
+
+.update-upload-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.update-upload-head p {
+  margin: 0 0 6px;
+  color: var(--cyan);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.update-upload-head h3 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(24px, 3vw, 34px);
+}
+
+.update-upload-head span {
+  max-width: 520px;
+  color: #ff3347;
+  font-weight: 900;
+  line-height: 1.7;
+}
+
+.update-upload-form {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 14px 16px;
+  align-items: center;
+}
+
+.update-upload-form > label {
+  color: #fff;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.update-upload-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.upload-button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 122px;
+  min-height: 58px;
+  padding: 0 14px;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(72, 216, 255, 0.92), rgba(24, 116, 153, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  font-weight: 900;
+  cursor: pointer;
+  text-align: center;
+}
+
+.upload-button input {
+  display: none;
+}
+
+.update-upload-extra {
+  grid-column: 1 / -1;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(133, 206, 255, 0.14);
+  border-radius: 10px;
+}
+
+.update-upload-extra summary {
+  color: var(--cyan);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.update-upload-extra div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.update-upload-extra label {
+  display: grid;
+  gap: 8px;
+  color: #fff;
+  font-weight: 900;
+}
+
+.update-upload-actions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.update-upload-actions button {
+  min-height: 58px;
+  padding: 0 18px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--red), #e83e52 54%, #8f1022);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.update-upload-actions .secondary-button {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05));
+}
+
+.update-upload-actions button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.update-upload-status {
+  grid-column: 2;
+  margin: 0;
+  color: #d7e8f4;
+  line-height: 1.7;
+}
+
+.update-upload-hint {
+  grid-column: 2;
+  margin: -4px 0 0;
+  color: #a9c4d8;
+  line-height: 1.6;
+}
+
 .update-status,
 .update-device {
   margin-bottom: 14px;
@@ -907,6 +1066,10 @@ body.video-modal-open {
 }
 
 .update-catalog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin: 0 0 14px;
   color: #d7e8f4;
   line-height: 1.7;
@@ -914,6 +1077,11 @@ body.video-modal-open {
 
 .update-catalog-head p {
   margin: 0;
+}
+
+.update-catalog-head .secondary-button {
+  min-height: 46px;
+  white-space: nowrap;
 }
 
 .update-list {
@@ -982,6 +1150,12 @@ body.video-modal-open {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.update-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .update-detail-top .secondary-button {
@@ -1290,6 +1464,10 @@ body.video-modal-open {
   .contact-grid {
     grid-template-columns: 1fr;
   }
+
+  .update-upload-extra div {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 680px) {
@@ -1316,11 +1494,45 @@ body.video-modal-open {
 
   .update-hero,
   .update-toolbar,
+  .update-upload-form,
   .update-card header,
   .update-card-body,
   .update-meta,
   .update-gallery-grid {
     grid-template-columns: 1fr;
+  }
+
+  .update-upload-head {
+    display: grid;
+  }
+
+  .update-catalog-head,
+  .update-detail-top {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .update-detail-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .update-upload-field,
+  .update-upload-extra div {
+    grid-template-columns: 1fr;
+  }
+
+  .update-upload-actions,
+  .update-upload-hint,
+  .update-upload-status {
+    grid-column: 1;
+  }
+
+  .upload-button,
+  .update-catalog-head .secondary-button,
+  .update-detail-actions .secondary-button,
+  .update-upload-actions button {
+    width: 100%;
   }
 
   .update-app-image {

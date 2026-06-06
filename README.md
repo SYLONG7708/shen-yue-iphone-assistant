@@ -8,6 +8,12 @@
 https://raw.githubusercontent.com/SYLONG7708/update/main/updates.json
 ```
 
+新版也支援 Google Apps Script 雲端清單：
+
+```text
+https://script.google.com/macros/s/你的部署ID/exec?type=updates
+```
+
 ## 重要檔案
 
 - `updates.json`：雲端更新清單。
@@ -19,6 +25,8 @@ https://raw.githubusercontent.com/SYLONG7708/update/main/updates.json
 ## 修改方式
 
 只要修改 `updates.json` 的 `name`、`description`、`iconUrl`、`imageUrl`、`apkUrl`、`sha256` 後重新上傳，車機端按「重新整理」即可看到變更，不必重新安裝更新中心 APK。
+
+也可以在更新中心頁面直接填寫「更新中心上傳表格」，選擇類別、填寫介紹、上傳圖標、兩張圖片與 APK，按「儲存並上傳雲端」後會送到 Google Apps Script，並寫入 `更新中心上傳` 工作表。
 
 ## 大檔提醒
 
