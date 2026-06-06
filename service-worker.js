@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v213-pin-protected-update-editor";
+const cacheName = "shen-yue-assistant-v216-add-app-pin-playlist";
 const assets = [
   "./",
   "./index.html",

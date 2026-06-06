@@ -14,6 +14,7 @@ const updateStatus = document.querySelector("[data-update-status]");
 const updateDevice = document.querySelector("[data-update-device]");
 const updateList = document.querySelector("[data-update-list]");
 const updateDetail = document.querySelector("[data-update-detail]");
+const updateUploadCard = document.querySelector("[data-update-upload-card]");
 const updateUploadForm = document.querySelector("[data-update-upload-form]");
 const updateUploadStatus = document.querySelector("[data-update-upload-status]");
 
@@ -74,9 +75,20 @@ const defaultContent = {
   ]
 };
 
+const surroundTutorialPlaylistTitle = "環景教學播放清單";
+const surroundTutorialPlaylistKey = "surround-view";
+const surroundTutorialVideos = [
+  { title: "該如何下載環景影像｜主機調閱｜電腦存放", category: "設定", url: "https://youtu.be/1SUlHDdkxPM", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle },
+  { title: "該如何知道環景是否有在錄製｜真的很重要", category: "設定", url: "https://youtu.be/h-BnxenbwyQ", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle },
+  { title: "教你如何更改環景車型｜顏色｜車牌號碼", category: "設定", url: "https://youtu.be/XW1fcxNh1xo", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle },
+  { title: "環景設定倒車軌跡樣式", category: "設定", url: "https://youtu.be/S6tRHKrkIVE", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle },
+  { title: "教你如何主機直接格式化環景記憶卡", category: "設定", url: "https://youtu.be/UDWqB1Di_RU", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle },
+  { title: "環景原車設置大全－基本功教學", category: "設定", url: "https://youtu.be/vcUqtftG2Uc", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle }
+];
+
 const videos = [
   { title: "新 UI 介面", category: "介面", url: "https://youtu.be/ir2H40ENsKY?si=B3FHIlE9rz7aLW7m" },
-  { title: "環景教學播放清單", category: "設定", url: "https://www.youtube.com/playlist?list=PLOoMP1Ydm1eVVIntvqtHyGJS7ONe7faG5" },
+  { title: surroundTutorialPlaylistTitle, category: "設定", url: surroundTutorialVideos[0].url, playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle, playlistItems: surroundTutorialVideos },
   { title: "樂克導航（免開網路）", category: "導航", url: "https://youtu.be/k9laYNbPRVI?si=Btzhb4ISUNE-7e1A" },
   { title: "iPhone 連接網路", category: "連線", url: "https://youtu.be/xJgQTR-GbN8" },
   { title: "iPhone 連接藍芽", category: "連線", url: "https://youtu.be/fVOtS2oUsqY" },
@@ -270,9 +282,11 @@ async function requestUpdateEditorAccess(actionLabel = "此操作") {
   if (ok) {
     updateEditorUnlocked = true;
     setUpdateUploadStatus("已通過管理 PIN，可新增或修改更新項目。", "success");
+    if (updateStatus) updateStatus.textContent = "已通過管理 PIN，可開啟更新表格。";
     return true;
   }
   setUpdateUploadStatus("PIN 錯誤，無法新增或修改更新項目。", "error");
+  if (updateStatus) updateStatus.textContent = "PIN 錯誤，更新表格未開啟。";
   return false;
 }
 
@@ -396,6 +410,19 @@ function setUpdateUploadStatus(message, tone = "") {
   if (!updateUploadStatus) return;
   updateUploadStatus.textContent = message;
   updateUploadStatus.dataset.tone = tone;
+}
+
+function showUpdateUploadCard(options = {}) {
+  if (!updateUploadCard) return;
+  updateUploadCard.hidden = false;
+  if (options.message) setUpdateUploadStatus(options.message, options.tone || "");
+  if (options.scroll) updateUploadCard.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function hideUpdateUploadCard() {
+  if (!updateUploadCard) return;
+  updateUploadCard.hidden = true;
+  if (updateStatus) updateStatus.textContent = "更新表格已隱藏。";
 }
 
 function formatFileSize(bytes) {
@@ -732,13 +759,14 @@ function setUpdateUploadField(name, value) {
 
 function resetUpdateUploadFormForNew() {
   if (!updateUploadForm) return;
+  showUpdateUploadCard();
   updateUploadForm.dataset.silentReset = "true";
   updateUploadForm.reset();
   setUpdateUploadMode("new");
   setUpdateUploadField("manifestId", "");
   syncUpdateUploadFileLabels();
   setUpdateUploadStatus("已切換為新增模式。請貼 APK 下載地址，其他欄位可依需要填寫。");
-  updateUploadForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  updateUploadCard?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function editUpdateUploadItem(index) {
@@ -746,6 +774,7 @@ function editUpdateUploadItem(index) {
   const item = currentUpdateItems[index];
   if (!item) return;
 
+  showUpdateUploadCard();
   updateUploadForm.dataset.silentReset = "true";
   updateUploadForm.reset();
   const galleryImages = Array.isArray(item.galleryImages) ? item.galleryImages : [];
@@ -773,7 +802,7 @@ function editUpdateUploadItem(index) {
   setUpdateUploadMode("edit");
   syncUpdateUploadFileLabels();
   setUpdateUploadStatus(`正在修改「${item.name || item.id || "未命名 APK"}」。儲存後本機正式清單會以最新資料顯示。`, "working");
-  updateUploadForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  updateUploadCard?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderEmptyRecord() {
@@ -943,15 +972,37 @@ function thumbUrl(url) {
   return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : "assets/hero-car-audio.png";
 }
 
+function videoIdentity(video = {}) {
+  const rawUrl = String(video.embedUrl || video.videoUrl || video.url || "").trim();
+  return youtubeId(rawUrl) || rawUrl || String(video.title || "");
+}
+
+function sameVideo(left = {}, right = {}) {
+  return videoIdentity(left) === videoIdentity(right);
+}
+
+function getVideoPlaylistItems(video = {}) {
+  if (Array.isArray(video.playlistItems) && video.playlistItems.length) return video.playlistItems;
+  if (!video.playlistKey) return [];
+  return videos.filter((item) => item.playlistKey === video.playlistKey && !Array.isArray(item.playlistItems));
+}
+
 function normalizeText(value) {
   return value.toLowerCase().replace(/\s+/g, "");
+}
+
+function getVideoSearchText(video = {}) {
+  const playlistText = Array.isArray(video.playlistItems)
+    ? video.playlistItems.map((item) => `${item.title} ${item.category}`).join(" ")
+    : "";
+  return `${video.title} ${video.category} ${playlistText}`;
 }
 
 function renderVideos() {
   const query = normalizeText(videoSearch.value || "");
   const filtered = videos.filter((video) => {
     const inCategory = activeVideoCategory === "all" || video.category === activeVideoCategory;
-    const inQuery = normalizeText(`${video.title} ${video.category}`).includes(query);
+    const inQuery = normalizeText(getVideoSearchText(video)).includes(query);
     return inCategory && inQuery;
   });
 
@@ -990,7 +1041,10 @@ function getVideoModal() {
             <button type="button" data-video-close>關閉</button>
           </div>
         </div>
-        <div class="video-player-frame" data-video-player></div>
+        <div class="video-modal-content">
+          <div class="video-player-frame" data-video-player></div>
+          <aside class="video-playlist-panel" data-video-playlist hidden></aside>
+        </div>
       </div>
     </div>
   `);
@@ -998,20 +1052,9 @@ function getVideoModal() {
   return document.querySelector("[data-video-modal]");
 }
 
-function openVideoPlayer(index) {
-  const video = videos[index];
-  if (!video) return;
-
-  const modal = getVideoModal();
-  const title = modal.querySelector("[data-video-modal-title]");
-  const meta = modal.querySelector("[data-video-modal-meta]");
-  const player = modal.querySelector("[data-video-player]");
+function renderVideoFrame(player, video = {}) {
   const source = getVideoSource(video);
   const poster = thumbUrl(video.thumbnail || video.poster || video.url);
-
-  lastFocusedVideoTrigger = document.activeElement;
-  title.textContent = video.title || "";
-  meta.textContent = video.category || "";
 
   if (source.kind === "video") {
     player.innerHTML = `
@@ -1033,10 +1076,74 @@ function openVideoPlayer(index) {
   } else {
     player.innerHTML = "";
   }
+}
+
+function renderVideoPlaylistPanel(modal, rootVideo = {}, playlist = [], activeIndex = 0) {
+  const shell = modal.querySelector("[data-video-shell]");
+  const panel = modal.querySelector("[data-video-playlist]");
+  const hasPlaylist = playlist.length > 1;
+
+  shell.classList.toggle("has-playlist", hasPlaylist);
+  if (!hasPlaylist) {
+    panel.hidden = true;
+    panel.innerHTML = "";
+    return;
+  }
+
+  const playlistTitle = rootVideo.playlistTitle || rootVideo.title || "播放清單";
+  panel.hidden = false;
+  panel.innerHTML = `
+    <div class="video-playlist-heading">
+      <h4>${escapeHtml(playlistTitle)}</h4>
+      <p>${activeIndex + 1} / ${playlist.length}</p>
+    </div>
+    <div class="video-playlist-list">
+      ${playlist.map((item, itemIndex) => `
+        <button class="video-playlist-item${itemIndex === activeIndex ? " active" : ""}" type="button" data-video-playlist-open="${itemIndex}"${itemIndex === activeIndex ? ' aria-current="true"' : ""}>
+          <img src="${thumbUrl(item.thumbnail || item.poster || item.url)}" alt="${escapeHtml(item.title)}" loading="lazy">
+          <span>
+            <small>${String(itemIndex + 1).padStart(2, "0")}</small>
+            <strong>${escapeHtml(item.title)}</strong>
+          </span>
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function openVideoPlayer(index, playlistIndex = null) {
+  const rootVideo = videos[index];
+  if (!rootVideo) return;
+
+  const modal = getVideoModal();
+  const wasHidden = modal.hidden;
+  const title = modal.querySelector("[data-video-modal-title]");
+  const meta = modal.querySelector("[data-video-modal-meta]");
+  const player = modal.querySelector("[data-video-player]");
+  const playlist = getVideoPlaylistItems(rootVideo);
+  const requestedPlaylistIndex = Number(playlistIndex);
+  const activeIndex = playlist.length
+    ? Number.isFinite(requestedPlaylistIndex)
+      ? Math.max(0, Math.min(requestedPlaylistIndex, playlist.length - 1))
+      : Math.max(0, playlist.findIndex((item) => sameVideo(item, rootVideo)))
+    : -1;
+  const activeVideo = playlist.length ? playlist[activeIndex] || playlist[0] : rootVideo;
+
+  if (wasHidden) lastFocusedVideoTrigger = document.activeElement;
+  title.textContent = playlist.length && Array.isArray(rootVideo.playlistItems)
+    ? rootVideo.title || activeVideo.title || ""
+    : activeVideo.title || "";
+  meta.textContent = playlist.length
+    ? `${activeVideo.category || rootVideo.category || ""}｜${activeIndex + 1}/${playlist.length}`
+    : activeVideo.category || "";
+  modal.dataset.videoRootIndex = String(index);
+
+  renderVideoFrame(player, activeVideo);
+  renderVideoPlaylistPanel(modal, rootVideo, playlist, activeIndex);
 
   modal.hidden = false;
   document.body.classList.add("video-modal-open");
-  modal.querySelector("[data-video-close]")?.focus({ preventScroll: true });
+  if (wasHidden) modal.querySelector("[data-video-close]")?.focus({ preventScroll: true });
 }
 
 function closeVideoPlayer() {
@@ -1046,6 +1153,13 @@ function closeVideoPlayer() {
   modal.hidden = true;
   modal.classList.remove("is-expanded");
   modal.querySelector("[data-video-player]").innerHTML = "";
+  modal.querySelector("[data-video-shell]")?.classList.remove("has-playlist");
+  const playlistPanel = modal.querySelector("[data-video-playlist]");
+  if (playlistPanel) {
+    playlistPanel.hidden = true;
+    playlistPanel.innerHTML = "";
+  }
+  delete modal.dataset.videoRootIndex;
   document.body.classList.remove("video-modal-open");
 
   if (document.fullscreenElement) {
@@ -1479,6 +1593,12 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const updateEditorHide = event.target.closest("[data-update-editor-hide]");
+  if (updateEditorHide) {
+    hideUpdateUploadCard();
+    return;
+  }
+
   const updateNew = event.target.closest("[data-update-new]");
   if (updateNew) {
     if (!await requestUpdateEditorAccess("新增更新項目")) return;
@@ -1535,6 +1655,17 @@ document.addEventListener("click", async (event) => {
   if (videoOpen) {
     event.preventDefault();
     openVideoPlayer(Number(videoOpen.dataset.videoOpen));
+    return;
+  }
+
+  const videoPlaylistOpen = event.target.closest("[data-video-playlist-open]");
+  if (videoPlaylistOpen) {
+    event.preventDefault();
+    const modal = document.querySelector("[data-video-modal]");
+    const rootIndex = Number(modal?.dataset.videoRootIndex);
+    if (Number.isFinite(rootIndex)) {
+      openVideoPlayer(rootIndex, Number(videoPlaylistOpen.dataset.videoPlaylistOpen));
+    }
     return;
   }
 

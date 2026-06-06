@@ -155,11 +155,11 @@
           <button class="secondary-button" type="button" data-open-install-permission>安裝權限</button>
         </div>
       </div>
-      <section class="update-upload-card" aria-labelledby="update-upload-title">
+      <section class="update-upload-card" data-update-upload-card aria-labelledby="update-upload-title" hidden>
         <div class="update-upload-head">
           <div>
             <p>Local Edit</p>
-            <h3 id="update-upload-title">更新中心正式版修改</h3>
+            <h3 id="update-upload-title">更新中心新增 / 修改</h3>
           </div>
           <span>正式版先儲存在本機，不上傳雲端；修改名稱與圖片會立即套用，並沿用原本 APK 下載網址。</span>
         </div>
@@ -228,6 +228,7 @@
             <button type="submit" data-save-update-upload>儲存新增</button>
             <button class="secondary-button" type="button" data-update-new>新增空白</button>
             <button class="secondary-button" type="reset">清除表格</button>
+            <button class="secondary-button" type="button" data-update-editor-hide>隱藏表格</button>
           </div>
           <p class="update-upload-status" data-update-upload-status>目前只儲存到本機正式清單，先不送雲端。</p>
         </form>
