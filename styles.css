@@ -1087,6 +1087,8 @@ body.video-modal-open {
 .upload-button {
   display: inline-grid;
   place-items: center;
+  position: relative;
+  overflow: hidden;
   min-width: 122px;
   min-height: 58px;
   padding: 0 14px;
@@ -1100,7 +1102,69 @@ body.video-modal-open {
 }
 
 .upload-button input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.upload-button[data-has-file="true"] {
+  background: linear-gradient(135deg, rgba(79, 195, 247, 0.95), rgba(93, 115, 255, 0.9));
+}
+
+.update-upload-field input.has-pending-upload {
+  color: #071018;
+  background: #eef8ff;
+  border-color: rgba(75, 216, 255, 0.72);
+}
+
+.upload-preview {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 54px;
+  padding: 10px;
+  color: #dceeff;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(91, 207, 255, 0.2);
+  border-radius: 8px;
+}
+
+.upload-preview[hidden] {
   display: none;
+}
+
+.upload-preview img {
+  width: 72px;
+  height: 46px;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+}
+
+.upload-preview strong,
+.upload-preview span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-preview strong {
+  color: #fff;
+  font-size: 15px;
+}
+
+.upload-preview span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .update-upload-extra {

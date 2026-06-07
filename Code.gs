@@ -210,19 +210,24 @@ function buildWarrantyRow(payload) {
 }
 
 function buildUpdateRow(row, savedFiles, manifestItem) {
+  const iconFileUrl = getFileSheetUrl(savedFiles.icon);
+  const firstImageFileUrl = getFileSheetUrl(savedFiles.firstImage);
+  const secondImageFileUrl = getFileSheetUrl(savedFiles.secondImage);
+  const apkFileUrl = getFileDownloadUrl(savedFiles.apk);
+
   return [
     formatUploadTime(new Date()),
-    row.iconUrl || "",
-    getFileSheetUrl(savedFiles.icon),
+    iconFileUrl || row.iconUrl || "",
+    iconFileUrl,
     row.appName || row.name || "",
     row.category || "",
     row.description || "",
-    row.firstImageUrl || "",
-    getFileSheetUrl(savedFiles.firstImage),
-    row.secondImageUrl || "",
-    getFileSheetUrl(savedFiles.secondImage),
-    row.apkUrl || "",
-    getFileDownloadUrl(savedFiles.apk),
+    firstImageFileUrl || row.firstImageUrl || "",
+    firstImageFileUrl,
+    secondImageFileUrl || row.secondImageUrl || "",
+    secondImageFileUrl,
+    apkFileUrl || row.apkUrl || "",
+    apkFileUrl,
     row.sizeLabel || fileSizeLabel(savedFiles.apk && savedFiles.apk.size) || "",
     row.packageName || "",
     row.versionName || "",

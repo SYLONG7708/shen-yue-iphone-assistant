@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v217-cloud-upload-github-tool";
+const cacheName = "shen-yue-assistant-v218-image-replace-upload";
 const assets = [
   "./",
   "./index.html",

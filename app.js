@@ -34,6 +34,12 @@ const fallbackUpdateManifestUrl = "https://raw.githubusercontent.com/SYLONG7708/
 const defaultUpdateManifestUrl = `${defaultCloudEndpoint}?type=updates`;
 const maxInlineImageUploadBytes = 8 * 1024 * 1024;
 const maxInlineApkUploadBytes = 24 * 1024 * 1024;
+const updateUploadFileTargets = {
+  iconFile: { fieldName: "iconUrl", kind: "image", label: "應用圖標" },
+  firstImageFile: { fieldName: "firstImageUrl", kind: "image", label: "第一張圖片" },
+  secondImageFile: { fieldName: "secondImageUrl", kind: "image", label: "第二張圖片" },
+  apkFile: { fieldName: "apkUrl", kind: "apk", label: "小 APK" }
+};
 const currentLineId = "@585eeefp";
 const legacyLineIds = new Set(["7708LUNG", "@7708LUNG", "7708lung", "@7708lung"]);
 const legacyCloudEndpoints = new Set([
@@ -476,6 +482,123 @@ function readUploadFile(file, kind = "image") {
   });
 }
 
+function getUpdateUploadFileTarget(input) {
+  return updateUploadFileTargets[input?.name] || null;
+}
+
+function clearPendingUploadField(field, restorePrevious = false) {
+  if (!field) return;
+  if (restorePrevious && Object.prototype.hasOwnProperty.call(field.dataset, "previousUploadValue")) {
+    field.value = field.dataset.previousUploadValue || "";
+  }
+  field.classList.remove("has-pending-upload");
+  delete field.dataset.pendingUpload;
+  delete field.dataset.previousUploadValue;
+}
+
+function clearAllPendingUploadFields(restorePrevious = false) {
+  if (!updateUploadForm) return;
+  updateUploadForm.querySelectorAll(".has-pending-upload").forEach((field) => {
+    clearPendingUploadField(field, restorePrevious);
+  });
+}
+
+function setPendingUploadFieldState(input, file) {
+  const target = getUpdateUploadFileTarget(input);
+  if (!target?.fieldName || !updateUploadForm) return;
+  const field = updateUploadForm.elements[target.fieldName];
+  if (!field) return;
+
+  if (!file) {
+    if (field.dataset.pendingUpload === input.name) clearPendingUploadField(field, true);
+    return;
+  }
+
+  if (target.kind === "apk" && hasText(field.value) && !field.classList.contains("has-pending-upload")) {
+    return;
+  }
+
+  if (field.dataset.pendingUpload !== input.name) {
+    field.dataset.previousUploadValue = field.value || "";
+  }
+  field.dataset.pendingUpload = input.name;
+  field.classList.add("has-pending-upload");
+  field.value = target.kind === "apk"
+    ? `待上傳小 APK：${file.name}`
+    : `待上傳置換：${file.name}`;
+}
+
+function clearUploadPreviewObjectUrl(preview) {
+  if (!preview?.dataset.objectUrl || typeof URL === "undefined") return;
+  URL.revokeObjectURL(preview.dataset.objectUrl);
+  delete preview.dataset.objectUrl;
+}
+
+function renderPendingUploadPreview(input, file) {
+  const target = getUpdateUploadFileTarget(input);
+  const fieldWrap = input?.closest(".update-upload-field");
+  if (!target || !fieldWrap) return;
+
+  let preview = fieldWrap.querySelector(`[data-upload-preview="${input.name}"]`);
+  if (!file) {
+    if (preview) {
+      clearUploadPreviewObjectUrl(preview);
+      preview.hidden = true;
+      preview.replaceChildren();
+    }
+    return;
+  }
+
+  if (!preview) {
+    preview = document.createElement("div");
+    preview.className = "upload-preview";
+    preview.dataset.uploadPreview = input.name;
+    fieldWrap.append(preview);
+  }
+
+  clearUploadPreviewObjectUrl(preview);
+  preview.replaceChildren();
+
+  if (target.kind === "image" && file.type?.startsWith("image/") && typeof URL !== "undefined") {
+    const image = document.createElement("img");
+    const objectUrl = URL.createObjectURL(file);
+    image.src = objectUrl;
+    image.alt = `${target.label}預覽`;
+    preview.dataset.objectUrl = objectUrl;
+    preview.append(image);
+  }
+
+  const text = document.createElement("div");
+  const title = document.createElement("strong");
+  const detail = document.createElement("span");
+  title.textContent = target.kind === "apk" ? file.name : `待置換：${file.name}`;
+  detail.textContent = `${target.label} · ${formatFileSize(file.size)}`;
+  text.append(title, detail);
+  preview.append(text);
+  preview.hidden = false;
+}
+
+function removePendingUploadDisplayValues(data = {}) {
+  if (!updateUploadForm) return data;
+  Object.entries(updateUploadFileTargets).forEach(([inputName, target]) => {
+    const file = updateUploadForm.elements[inputName]?.files?.[0];
+    if (!file || !target.fieldName) return;
+    if (target.kind === "image" || String(data[target.fieldName] || "").startsWith("待上傳")) {
+      data[target.fieldName] = "";
+    }
+  });
+  return data;
+}
+
+function buildCloudUpdateUploadData(data = {}, files = {}) {
+  const cloudData = { ...data };
+  if (files.icon) cloudData.iconUrl = "";
+  if (files.firstImage) cloudData.firstImageUrl = "";
+  if (files.secondImage) cloudData.secondImageUrl = "";
+  if (files.apk && String(cloudData.apkUrl || "").startsWith("待上傳")) cloudData.apkUrl = "";
+  return cloudData;
+}
+
 function getUpdateUploadData() {
   const data = {};
   const formData = new FormData(updateUploadForm);
@@ -483,7 +606,7 @@ function getUpdateUploadData() {
     if (typeof File !== "undefined" && value instanceof File) return;
     data[key] = String(value ?? "").trim();
   });
-  return data;
+  return removePendingUploadDisplayValues(data);
 }
 
 function normalizeUpdateItemId(value) {
@@ -558,6 +681,46 @@ function getUpdateItemKey(item = {}) {
   return String(item.id || item.packageName || normalizeUpdateItemId(item.name || item.apkUrl || "shen-yue-app")).trim();
 }
 
+function isInlineUploadUrl(value) {
+  return /^(data:|blob:)/i.test(String(value || ""));
+}
+
+function getStorageSafeUpdateItem(item = {}) {
+  const key = getUpdateItemKey(item);
+  const existingItem = currentUpdateItems.find((existing) => getUpdateItemKey(existing) === key) || {};
+  const existingGalleryImages = Array.isArray(existingItem.galleryImages) ? existingItem.galleryImages : [];
+  const galleryImages = (Array.isArray(item.galleryImages) ? item.galleryImages : [])
+    .map((url, index) => isInlineUploadUrl(url) ? (existingGalleryImages[index] || "") : url)
+    .filter(Boolean);
+  const imageUrl = isInlineUploadUrl(item.imageUrl)
+    ? (galleryImages[0] || existingItem.imageUrl || "assets/update-splash.png")
+    : item.imageUrl;
+  const iconUrl = isInlineUploadUrl(item.iconUrl)
+    ? (existingItem.iconUrl || "assets/app-logo.png")
+    : item.iconUrl;
+
+  return {
+    ...item,
+    imageUrl,
+    iconUrl,
+    galleryImages
+  };
+}
+
+function rememberLastUpdateUpload(updateApp, manifestItem) {
+  try {
+    localStorage.setItem(updateUploadKey, JSON.stringify({
+      createdAt: new Date().toISOString(),
+      updateApp,
+      manifestItem: getStorageSafeUpdateItem(manifestItem)
+    }));
+    return true;
+  } catch {
+    localStorage.removeItem(updateUploadKey);
+    return false;
+  }
+}
+
 function getLocalUpdateOverrides() {
   try {
     const items = JSON.parse(localStorage.getItem(localUpdateOverridesKey) || "[]");
@@ -586,12 +749,24 @@ function mergeUpdateOverrides(items = []) {
 
 function saveLocalUpdateOverride(item) {
   if (!item) return;
-  const key = getUpdateItemKey(item);
+  const storageItem = getStorageSafeUpdateItem(item);
+  const key = getUpdateItemKey(storageItem);
   const nextItems = [
-    item,
-    ...getLocalUpdateOverrides().filter((existing) => getUpdateItemKey(existing) !== key)
+    storageItem,
+    ...getLocalUpdateOverrides()
+      .map((existing) => getStorageSafeUpdateItem(existing))
+      .filter((existing) => getUpdateItemKey(existing) !== key)
   ];
-  localStorage.setItem(localUpdateOverridesKey, JSON.stringify(nextItems));
+  try {
+    localStorage.setItem(localUpdateOverridesKey, JSON.stringify(nextItems));
+  } catch {
+    localStorage.removeItem(localUpdateOverridesKey);
+    try {
+      localStorage.setItem(localUpdateOverridesKey, JSON.stringify([storageItem]));
+    } catch {
+      // Local preview persistence is optional; cloud upload must keep going.
+    }
+  }
 }
 
 function mergeExistingUploadData(data = {}, existingItem = null) {
@@ -684,16 +859,13 @@ async function saveAndUploadUpdateApp() {
 
     const localManifestItem = buildUpdateManifestItem(mergedData, files);
     saveLocalUpdateOverride(localManifestItem);
+    const cloudUpdateApp = buildCloudUpdateUploadData(mergedData, files);
 
-    localStorage.setItem(updateUploadKey, JSON.stringify({
-      createdAt: new Date().toISOString(),
-      updateApp: mergedData,
-      manifestItem: localManifestItem
-    }));
+    rememberLastUpdateUpload(mergedData, localManifestItem);
     renderUploadedUpdatePreview(localManifestItem);
 
     await sendToCloud(getPayload("update-center-app", {
-      updateApp: mergedData,
+      updateApp: cloudUpdateApp,
       files
     }));
     window.setTimeout(() => loadUpdateManifest(true), 1800);
@@ -717,14 +889,34 @@ function syncUpdateUploadFileLabels() {
   updateUploadForm.querySelectorAll(".upload-button input[type='file']").forEach((input) => {
     const label = input.closest(".upload-button");
     if (!label) return;
+    const target = getUpdateUploadFileTarget(input);
     label.dataset.defaultLabel = label.dataset.defaultLabel || label.textContent.trim();
-    const updateLabel = () => {
+    const updateLabel = (announce = false) => {
       const file = input.files?.[0];
       const textNode = [...label.childNodes].find((node) => node.nodeType === Node.TEXT_NODE);
-      if (textNode) textNode.textContent = file ? "已選檔案" : label.dataset.defaultLabel;
+      if (textNode) textNode.textContent = file ? "重新選擇" : label.dataset.defaultLabel;
       label.title = file?.name || "";
+      label.dataset.hasFile = file ? "true" : "false";
+      if (file && target) {
+        try {
+          assertInlineUploadSize(file, target.kind);
+        } catch (error) {
+          input.value = "";
+          setPendingUploadFieldState(input, null);
+          renderPendingUploadPreview(input, null);
+          setUpdateUploadStatus(error.message || String(error), "error");
+          return;
+        }
+      }
+      setPendingUploadFieldState(input, file);
+      renderPendingUploadPreview(input, file);
+      if (announce && file && target?.kind === "image") {
+        setUpdateUploadStatus(`已選擇新圖片「${file.name}」，按「儲存並上傳」後會置換原圖片。`, "working");
+      }
       if (file && input.name === "apkFile") {
-        const hasApkUrl = hasText(updateUploadForm.elements.apkUrl?.value);
+        const apkUrlField = updateUploadForm.elements.apkUrl;
+        const hasApkUrl = hasText(apkUrlField?.dataset.previousUploadValue)
+          || (apkUrlField && !apkUrlField.classList.contains("has-pending-upload") && hasText(apkUrlField.value));
         if (hasApkUrl) {
           setUpdateUploadStatus("已填 APK 下載地址，送出時會使用網址並略過右側 APK 檔案。");
         } else if (file.size > maxInlineApkUploadBytes) {
@@ -733,7 +925,7 @@ function syncUpdateUploadFileLabels() {
       }
     };
     if (!input.dataset.labelReady) {
-      input.addEventListener("change", updateLabel);
+      input.addEventListener("change", () => updateLabel(true));
       input.dataset.labelReady = "true";
     }
     updateLabel();
@@ -744,6 +936,7 @@ function syncUpdateUploadFileLabels() {
       const silentReset = updateUploadForm.dataset.silentReset === "true";
       delete updateUploadForm.dataset.silentReset;
       window.setTimeout(() => {
+        clearAllPendingUploadFields(false);
         if (!silentReset) setUpdateUploadMode("new");
         syncUpdateUploadFileLabels();
         if (!silentReset) setUpdateUploadStatus("表格已清除，可重新填寫後儲存。");
@@ -767,6 +960,7 @@ function setUpdateUploadField(name, value) {
   if (field.tagName === "SELECT" && text && ![...field.options].some((option) => option.value === text)) {
     field.add(new Option(text, text));
   }
+  clearPendingUploadField(field, false);
   field.value = text;
 }
 
