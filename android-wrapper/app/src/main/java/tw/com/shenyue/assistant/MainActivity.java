@@ -1,6 +1,7 @@
 package tw.com.shenyue.assistant;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
@@ -9,16 +10,20 @@ import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.ServiceWorkerController;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Toast;
 
 public class MainActivity extends Activity {
+    private static final int FILE_CHOOSER_REQUEST_CODE = 7708;
     private WebView webView;
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
+    private ValueCallback<Uri[]> filePathCallback;
     private long lastCloudRefresh = 0;
 
     @Override
@@ -41,7 +46,7 @@ public class MainActivity extends Activity {
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/1.0.7");
+        settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/1.0.8");
 
         if (BuildConfig.HOME_URL.startsWith("https://")) {
             configureLiveCloudLoading(settings);
@@ -50,6 +55,37 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new UpdateBridge(this), "ShenYueUpdater");
 
         webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(
+                    WebView webView,
+                    ValueCallback<Uri[]> filePathCallback,
+                    FileChooserParams fileChooserParams
+            ) {
+                if (MainActivity.this.filePathCallback != null) {
+                    MainActivity.this.filePathCallback.onReceiveValue(null);
+                }
+                MainActivity.this.filePathCallback = filePathCallback;
+
+                Intent intent;
+                try {
+                    intent = fileChooserParams.createIntent();
+                } catch (Exception error) {
+                    intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("*/*");
+                }
+
+                try {
+                    startActivityForResult(intent, FILE_CHOOSER_REQUEST_CODE);
+                } catch (ActivityNotFoundException error) {
+                    MainActivity.this.filePathCallback = null;
+                    filePathCallback.onReceiveValue(null);
+                    Toast.makeText(MainActivity.this, "找不到可用的檔案選擇器。", Toast.LENGTH_LONG).show();
+                    return false;
+                }
+                return true;
+            }
+
             @Override
             public void onShowCustomView(View view, CustomViewCallback callback) {
                 if (customView != null) {
@@ -200,6 +236,30 @@ public class MainActivity extends Activity {
             return;
         }
         super.onBackPressed();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != FILE_CHOOSER_REQUEST_CODE || filePathCallback == null) {
+            return;
+        }
+
+        Uri[] results = null;
+        if (resultCode == RESULT_OK) {
+            if (data != null && data.getClipData() != null) {
+                int count = data.getClipData().getItemCount();
+                results = new Uri[count];
+                for (int index = 0; index < count; index++) {
+                    results[index] = data.getClipData().getItemAt(index).getUri();
+                }
+            } else if (data != null && data.getData() != null) {
+                results = new Uri[] { data.getData() };
+            }
+        }
+
+        filePathCallback.onReceiveValue(results);
+        filePathCallback = null;
     }
 
     @Override

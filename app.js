@@ -28,7 +28,7 @@ const adminPinHash = "7c5fab57f8c1447f91f98eb3fcea7954e4f704d92686c5fd2e551e34ca
 const fallbackAdminPin = String.fromCharCode(55, 55, 48, 56);
 const defaultCloudDeploymentId = "AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz";
 const defaultCloudEndpoint = `https://script.google.com/macros/s/${defaultCloudDeploymentId}/exec`;
-const defaultContentConfigUrl = "https://shen-yue.com.tw/shen-yue-assistant-content.json";
+const defaultContentConfigUrl = "shen-yue-assistant-content.json";
 const legacyUpdateManifestUrl = "https://sylong7708.github.io/shen-yue-iphone-assistant/updates.json";
 const fallbackUpdateManifestUrl = "https://raw.githubusercontent.com/SYLONG7708/update/main/updates.json";
 const defaultUpdateManifestUrl = `${defaultCloudEndpoint}?type=updates`;
@@ -201,6 +201,9 @@ function getAdminSettings() {
   };
   settings.lineId = normalizeLineId(settings.lineId);
   settings.cloudEndpoint = normalizeCloudEndpoint(settings.cloudEndpoint);
+  if (!settings.contentConfigUrl || String(settings.contentConfigUrl).includes("shen-yue.com.tw")) {
+    settings.contentConfigUrl = defaultContentConfigUrl;
+  }
   return settings;
 }
 
@@ -319,6 +322,9 @@ function resolveManifestRelativeUrl(value, fallback = "") {
   const url = String(value || "").trim();
   if (!url) return fallback;
   if (/^(https?:|file:|data:|blob:)/i.test(url)) return url;
+  if (/^assets\//i.test(url)) {
+    return new URL(url, location.href).href;
+  }
 
   try {
     const manifestBase = new URL(currentUpdateManifestUrl || "updates.json", location.href);
@@ -528,14 +534,14 @@ function buildUpdateManifestItem(data = {}, files = {}) {
     minAndroid: data.minAndroid || "依 APK 設定",
     targetSdk: data.targetSdk || "",
     sizeLabel: data.sizeLabel || files.apk?.sizeLabel || "",
-    apkUrl: files.apk?.dataUrl || data.apkUrl || "",
+    apkUrl: data.apkUrl || "",
     sha256: data.sha256 || "",
     imageUrl: galleryImages[0] || "assets/update-splash.png",
     iconUrl: files.icon?.dataUrl || data.iconUrl || "assets/app-logo.png",
     galleryImages,
     description: data.description || "此 APK 尚未填寫介紹。",
     changelog: [
-      "已由更新中心上傳表格新增",
+      "已由更新中心表格新增",
       data.category ? `分類：${data.category}` : "",
       "可在車機內下載安裝"
     ].filter(Boolean)
@@ -648,10 +654,10 @@ async function saveAndUploadUpdateApp() {
 
   if (submitButton) submitButton.disabled = true;
   const workingText = mergedData.apkUrl
-    ? "正在儲存下載網址與更新資料..."
+    ? "正在儲存下載網址與更新資料，並送出雲端同步..."
     : isEditMode
-      ? "正在儲存修改資料，並沿用原本的 APK 下載網址..."
-      : "正在讀取小型檔案並儲存到本機正式清單...";
+      ? "正在儲存修改資料，並送出雲端同步..."
+      : "正在讀取小型檔案並送出雲端同步...";
   setUpdateUploadStatus(workingText, "working");
 
   try {
@@ -685,15 +691,22 @@ async function saveAndUploadUpdateApp() {
       manifestItem: localManifestItem
     }));
     renderUploadedUpdatePreview(localManifestItem);
+
+    await sendToCloud(getPayload("update-center-app", {
+      updateApp: mergedData,
+      files
+    }));
+    window.setTimeout(() => loadUpdateManifest(true), 1800);
+
     const actionText = isEditMode ? "修改" : "新增";
     const apkText = mergedData.apkUrl
-      ? "已沿用 APK 下載網址，沒有上傳右側 APK 檔案。"
+      ? "已使用 APK 下載網址，沒有上傳右側 APK 檔案。"
       : isEditMode
-        ? "本機正式清單會沿用同一筆 App 原本的 APK 下載網址。"
-        : "小型 APK 檔案已暫存到本機正式清單。";
-    setUpdateUploadStatus(`已儲存${actionText}資料到本機正式版，尚未上傳雲端。${apkText}`, "success");
+        ? "雲端會沿用同一筆 App 原本的 APK 下載網址；若有選新檔案也會送到 Google Drive。"
+        : "小型 APK 檔案已送到 Apps Script，會由 Google Drive 產生下載網址。";
+    setUpdateUploadStatus(`已儲存${actionText}資料並送出雲端同步。${apkText} 請按「重新整理」讀取雲端清單。`, "success");
   } catch (error) {
-    setUpdateUploadStatus(`儲存失敗：${error.message || error}`, "error");
+    setUpdateUploadStatus(`儲存或上傳失敗：${error.message || error}`, "error");
   } finally {
     if (submitButton) submitButton.disabled = false;
   }
@@ -744,7 +757,7 @@ function setUpdateUploadMode(mode = "new") {
   if (!updateUploadForm) return;
   const saveButton = updateUploadForm.querySelector("[data-save-update-upload]");
   updateUploadForm.dataset.mode = mode;
-  if (saveButton) saveButton.textContent = mode === "edit" ? "儲存修改" : "儲存新增";
+  if (saveButton) saveButton.textContent = mode === "edit" ? "儲存修改並上傳" : "儲存並上傳";
 }
 
 function setUpdateUploadField(name, value) {
@@ -765,7 +778,7 @@ function resetUpdateUploadFormForNew() {
   setUpdateUploadMode("new");
   setUpdateUploadField("manifestId", "");
   syncUpdateUploadFileLabels();
-  setUpdateUploadStatus("已切換為新增模式。請貼 APK 下載地址，其他欄位可依需要填寫。");
+  setUpdateUploadStatus("已切換為新增模式。建議貼 GitHub Releases APK 下載地址；圖片可直接選檔上傳。");
   updateUploadCard?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -795,13 +808,13 @@ function editUpdateUploadItem(index) {
   setUpdateUploadField("sha256", item.sha256 || "");
 
   const extra = updateUploadForm.querySelector(".update-upload-extra");
-  if (extra && (item.packageName || item.versionName || item.versionCode || item.minAndroid || item.targetSdk || item.sha256)) {
+  if (extra && (item.minAndroid || item.targetSdk || item.sha256)) {
     extra.open = true;
   }
 
   setUpdateUploadMode("edit");
   syncUpdateUploadFileLabels();
-  setUpdateUploadStatus(`正在修改「${item.name || item.id || "未命名 APK"}」。儲存後本機正式清單會以最新資料顯示。`, "working");
+  setUpdateUploadStatus(`正在修改「${item.name || item.id || "未命名 APK"}」。儲存後會送出雲端同步。`, "working");
   updateUploadCard?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 

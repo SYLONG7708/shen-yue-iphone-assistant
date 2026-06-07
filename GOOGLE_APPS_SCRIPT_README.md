@@ -29,3 +29,13 @@ https://script.google.com/macros/s/你的部署ID/exec?type=updates
 ```
 
 若雲端清單暫時無法讀取，App 會退回內建 `updates.json`。
+
+## 大型 APK 建議
+
+Google Apps Script / Google Drive 表單上傳適合圖片與小型 APK。大型 APK 建議改用本機工具：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\publish-update-app.ps1 -ApkPath "C:\路徑\app.apk" -Name "App 名稱" -PackageName "com.example.app" -VersionCode 100 -VersionName "1.0.0"
+```
+
+工具會把 APK 上傳到 `SYLONG7708/update` 的 `apk-cloud` GitHub Release，並更新 `updates.json`。完整教學在 `docs/update-center-upload-guide.html`。

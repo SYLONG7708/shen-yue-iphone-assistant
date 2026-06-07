@@ -152,6 +152,7 @@
         </label>
         <div class="update-actions">
           <button type="button" data-refresh-updates>重新整理</button>
+          <a class="secondary-button" href="docs/update-center-upload-guide.html" target="_blank" rel="noopener">上傳教學</a>
           <button class="secondary-button" type="button" data-open-install-permission>安裝權限</button>
         </div>
       </div>
@@ -161,7 +162,7 @@
             <p>Local Edit</p>
             <h3 id="update-upload-title">更新中心新增 / 修改</h3>
           </div>
-          <span>正式版先儲存在本機，不上傳雲端；修改名稱與圖片會立即套用，並沿用原本 APK 下載網址。</span>
+          <span>儲存後會送到 Google Apps Script；圖片與小型 APK 會保存到 Google Drive，大型 APK 建議使用 GitHub Releases 下載網址。</span>
         </div>
         <form class="update-upload-form" data-update-upload-form>
           <input type="hidden" name="manifestId" data-update-edit-id>
@@ -205,19 +206,25 @@
           <label for="update-upload-apk">應用下載地址</label>
           <div class="update-upload-field">
             <input id="update-upload-apk" name="apkUrl" type="text" placeholder="貼 APK 直接下載地址；大檔請先放免費空間">
-            <label class="upload-button">APK 上傳<input name="apkFile" type="file" accept=".apk,application/vnd.android.package-archive"></label>
+            <label class="upload-button">小 APK 上傳<input name="apkFile" type="file" accept=".apk,application/vnd.android.package-archive"></label>
           </div>
           <p class="update-upload-hint">修改既有 App 時可只改名稱，不用重新填 APK 網址；新增 App 時才需要下載地址或小型 APK 檔案。</p>
 
           <label for="update-upload-size">App 容量</label>
           <input id="update-upload-size" name="sizeLabel" type="text" placeholder="請輸入大小，例如 41.6 MB">
 
+          <label for="update-upload-package">套件名稱</label>
+          <input id="update-upload-package" name="packageName" type="text" placeholder="例如 com.example.app" required>
+
+          <label for="update-upload-version-name">版本名稱</label>
+          <input id="update-upload-version-name" name="versionName" type="text" placeholder="例如 1.0.0">
+
+          <label for="update-upload-version-code">版本碼</label>
+          <input id="update-upload-version-code" name="versionCode" type="number" inputmode="numeric" min="1" step="1" placeholder="例如 100" required>
+
           <details class="update-upload-extra">
             <summary>進階更新資訊</summary>
             <div>
-              <label>套件名稱<input name="packageName" type="text" placeholder="例如 com.example.app"></label>
-              <label>版本名稱<input name="versionName" type="text" placeholder="例如 1.0.0"></label>
-              <label>版本碼<input name="versionCode" type="number" inputmode="numeric" min="0" step="1" placeholder="例如 100"></label>
               <label>最低 Android<input name="minAndroid" type="text" placeholder="依 APK 設定"></label>
               <label>目標 SDK<input name="targetSdk" type="number" inputmode="numeric" min="1" step="1" placeholder="例如 35"></label>
               <label>SHA-256<input name="sha256" type="text" placeholder="可留空"></label>
@@ -225,12 +232,12 @@
           </details>
 
           <div class="update-upload-actions">
-            <button type="submit" data-save-update-upload>儲存新增</button>
+            <button type="submit" data-save-update-upload>儲存並上傳</button>
             <button class="secondary-button" type="button" data-update-new>新增空白</button>
             <button class="secondary-button" type="reset">清除表格</button>
             <button class="secondary-button" type="button" data-update-editor-hide>隱藏表格</button>
           </div>
-          <p class="update-upload-status" data-update-upload-status>目前只儲存到本機正式清單，先不送雲端。</p>
+          <p class="update-upload-status" data-update-upload-status>新增或修改資料會同步到雲端更新清單。</p>
         </form>
       </section>
       <div class="update-status" data-update-status>尚未讀取雲端清單。</div>

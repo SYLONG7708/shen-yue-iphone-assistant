@@ -108,6 +108,9 @@ textarea {
 .admin-form button,
 .update-actions button,
 .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 44px;
   padding: 0 16px;
   color: #fff;
@@ -116,6 +119,7 @@ textarea {
   border-radius: 10px;
   font-weight: 900;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .hero {

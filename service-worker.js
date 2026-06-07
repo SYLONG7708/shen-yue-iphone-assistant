@@ -1,10 +1,11 @@
-const cacheName = "shen-yue-assistant-v216-add-app-pin-playlist";
+const cacheName = "shen-yue-assistant-v217-cloud-upload-github-tool";
 const assets = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
   "./updates.json",
+  "./shen-yue-assistant-content.json",
   "./manifest.webmanifest",
   "./assets/app-logo.png",
   "./assets/update-splash.png",
