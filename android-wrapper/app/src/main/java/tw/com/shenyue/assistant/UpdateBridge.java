@@ -5,12 +5,17 @@ import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
+import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.widget.Toast;
 
@@ -41,10 +46,15 @@ public class UpdateBridge {
     private final PackageManager packageManager;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ConcurrentHashMap<String, UpdateTask> tasks = new ConcurrentHashMap<>();
+    private volatile Uri lastSelectedFileUri;
 
     UpdateBridge(Activity activity) {
         this.activity = activity;
         this.packageManager = activity.getPackageManager();
+    }
+
+    void setLastSelectedFileUri(Uri uri) {
+        lastSelectedFileUri = uri;
     }
 
     @JavascriptInterface
@@ -204,6 +214,109 @@ public class UpdateBridge {
                 activity.startActivity(new Intent(Settings.ACTION_SETTINGS));
             }
         });
+    }
+
+    @JavascriptInterface
+    public String inspectLastSelectedApk(String fileName) {
+        JSONObject result = new JSONObject();
+        try {
+            Uri uri = lastSelectedFileUri;
+            if (uri == null) {
+                result.put("ok", false);
+                result.put("message", "找不到剛剛選擇的 APK 檔案。");
+                return result.toString();
+            }
+            File apkFile = copySelectedApkToCache(uri, fileName);
+            return inspectApkFile(apkFile).toString();
+        } catch (Exception error) {
+            putError(result, error);
+            return result.toString();
+        }
+    }
+
+    private File copySelectedApkToCache(Uri uri, String fileName) throws Exception {
+        File dir = new File(activity.getCacheDir(), "inspect-apks");
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IllegalStateException("無法建立 APK 讀取暫存資料夾。");
+        }
+
+        String safeName = safeFileName(fileName == null || fileName.trim().length() == 0 ? "selected.apk" : fileName.trim());
+        if (!safeName.toLowerCase(Locale.US).endsWith(".apk")) {
+            safeName = safeName + ".apk";
+        }
+        File outFile = new File(dir, safeName);
+
+        try (InputStream input = activity.getContentResolver().openInputStream(uri);
+             FileOutputStream output = new FileOutputStream(outFile)) {
+            if (input == null) {
+                throw new IllegalStateException("無法讀取選擇的 APK 檔案。");
+            }
+            byte[] buffer = new byte[64 * 1024];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+        }
+
+        if (outFile.length() <= 0) {
+            throw new IllegalStateException("選擇的 APK 檔案是空的。");
+        }
+        return outFile;
+    }
+
+    private JSONObject inspectApkFile(File apkFile) throws Exception {
+        JSONObject result = new JSONObject();
+        PackageInfo info = packageManager.getPackageArchiveInfo(apkFile.getAbsolutePath(), 0);
+        if (info == null || info.applicationInfo == null) {
+            result.put("ok", false);
+            result.put("message", "Android 無法解析這個 APK。");
+            return result;
+        }
+
+        ApplicationInfo appInfo = info.applicationInfo;
+        appInfo.sourceDir = apkFile.getAbsolutePath();
+        appInfo.publicSourceDir = apkFile.getAbsolutePath();
+
+        result.put("ok", true);
+        result.put("packageName", info.packageName == null ? "" : info.packageName);
+        result.put("versionName", info.versionName == null ? "" : info.versionName);
+        result.put("versionCode", getVersionCode(info));
+        result.put("targetSdk", appInfo.targetSdkVersion);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            result.put("minSdk", appInfo.minSdkVersion);
+        }
+        CharSequence label = appInfo.loadLabel(packageManager);
+        result.put("appName", label == null ? "" : label.toString());
+        result.put("sha256", sha256(apkFile));
+
+        try {
+            Drawable icon = appInfo.loadIcon(packageManager);
+            String iconDataUrl = drawableToDataUrl(icon);
+            if (iconDataUrl.length() > 0) {
+                result.put("iconDataUrl", iconDataUrl);
+            }
+        } catch (Exception ignored) {
+            // Icon extraction is optional; metadata is still useful.
+        }
+        return result;
+    }
+
+    private String drawableToDataUrl(Drawable drawable) {
+        if (drawable == null) return "";
+        int width = drawable.getIntrinsicWidth() > 0 ? drawable.getIntrinsicWidth() : 128;
+        int height = drawable.getIntrinsicHeight() > 0 ? drawable.getIntrinsicHeight() : 128;
+        width = Math.max(1, Math.min(width, 256));
+        height = Math.max(1, Math.min(height, 256));
+
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, width, height);
+        drawable.draw(canvas);
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.PNG, 95, output);
+        bitmap.recycle();
+        return "data:image/png;base64," + Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP);
     }
 
     private void runDownloadAndInstall(UpdateTask task, JSONObject item) {

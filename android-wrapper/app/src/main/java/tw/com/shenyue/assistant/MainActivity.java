@@ -25,6 +25,7 @@ public class MainActivity extends Activity {
     private WebChromeClient.CustomViewCallback customViewCallback;
     private ValueCallback<Uri[]> filePathCallback;
     private long lastCloudRefresh = 0;
+    private UpdateBridge updateBridge;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,7 +53,8 @@ public class MainActivity extends Activity {
             configureLiveCloudLoading(settings);
         }
 
-        webView.addJavascriptInterface(new UpdateBridge(this), "ShenYueUpdater");
+        updateBridge = new UpdateBridge(this);
+        webView.addJavascriptInterface(updateBridge, "ShenYueUpdater");
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -256,6 +258,10 @@ public class MainActivity extends Activity {
             } else if (data != null && data.getData() != null) {
                 results = new Uri[] { data.getData() };
             }
+        }
+
+        if (updateBridge != null) {
+            updateBridge.setLastSelectedFileUri(results != null && results.length > 0 ? results[0] : null);
         }
 
         filePathCallback.onReceiveValue(results);

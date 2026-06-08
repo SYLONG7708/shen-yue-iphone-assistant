@@ -68,6 +68,8 @@ let currentUpdateManifestUrl = "updates.json";
 let lastFocusedVideoTrigger = null;
 let updateEditorUnlocked = false;
 let adminUnlocked = false;
+let lastParsedUploadApk = null;
+let updateUploadApkInspectionId = 0;
 
 const defaultContent = {
   heroTitle: "車機教學、保固資料、售後聯絡。",
@@ -446,6 +448,747 @@ function formatFileSize(bytes) {
   return `${size} B`;
 }
 
+function getUploadFileSignature(file) {
+  if (!file) return "";
+  return [file.name || "", file.size || 0, file.lastModified || 0].join(":");
+}
+
+function viewForBytes(bytes) {
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+}
+
+function decodeUtf8(bytes) {
+  if (typeof TextDecoder !== "undefined") return new TextDecoder("utf-8").decode(bytes);
+  let text = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    text += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return decodeURIComponent(escape(text));
+}
+
+function decodeUtf16Le(bytes) {
+  if (typeof TextDecoder !== "undefined") return new TextDecoder("utf-16le").decode(bytes);
+  const view = viewForBytes(bytes);
+  let text = "";
+  for (let offset = 0; offset + 1 < bytes.length; offset += 2) {
+    text += String.fromCharCode(view.getUint16(offset, true));
+  }
+  return text;
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function bytesToDataUrl(bytes, mimeType = "application/octet-stream") {
+  return `data:${mimeType};base64,${bytesToBase64(bytes)}`;
+}
+
+function getImageMimeType(path = "") {
+  const lower = String(path).toLowerCase();
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".gif")) return "image/gif";
+  return "image/png";
+}
+
+function getFileExtension(path = "", fallback = "png") {
+  const match = String(path).match(/\.([a-z0-9]+)$/i);
+  return match ? match[1].toLowerCase() : fallback;
+}
+
+function sha256BytesFallback(bytes) {
+  const constants = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ];
+  const hash = [
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+  ];
+  const paddedLength = (((bytes.length + 9 + 63) >> 6) << 6);
+  const padded = new Uint8Array(paddedLength);
+  padded.set(bytes);
+  padded[bytes.length] = 0x80;
+  const view = viewForBytes(padded);
+  const bitLength = bytes.length * 8;
+  view.setUint32(paddedLength - 8, Math.floor(bitLength / 0x100000000), false);
+  view.setUint32(paddedLength - 4, bitLength >>> 0, false);
+
+  const words = new Uint32Array(64);
+  for (let chunk = 0; chunk < paddedLength; chunk += 64) {
+    for (let index = 0; index < 16; index += 1) {
+      words[index] = view.getUint32(chunk + index * 4, false);
+    }
+    for (let index = 16; index < 64; index += 1) {
+      const s0 = rightRotate(words[index - 15], 7) ^ rightRotate(words[index - 15], 18) ^ (words[index - 15] >>> 3);
+      const s1 = rightRotate(words[index - 2], 17) ^ rightRotate(words[index - 2], 19) ^ (words[index - 2] >>> 10);
+      words[index] = (words[index - 16] + s0 + words[index - 7] + s1) >>> 0;
+    }
+
+    let [a, b, c, d, e, f, g, h] = hash;
+    for (let index = 0; index < 64; index += 1) {
+      const s1 = rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25);
+      const choice = (e & f) ^ ((~e) & g);
+      const temp1 = (h + s1 + choice + constants[index] + words[index]) >>> 0;
+      const s0 = rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22);
+      const majority = (a & b) ^ (a & c) ^ (b & c);
+      const temp2 = (s0 + majority) >>> 0;
+      h = g;
+      g = f;
+      f = e;
+      e = (d + temp1) >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temp1 + temp2) >>> 0;
+    }
+
+    hash[0] = (hash[0] + a) >>> 0;
+    hash[1] = (hash[1] + b) >>> 0;
+    hash[2] = (hash[2] + c) >>> 0;
+    hash[3] = (hash[3] + d) >>> 0;
+    hash[4] = (hash[4] + e) >>> 0;
+    hash[5] = (hash[5] + f) >>> 0;
+    hash[6] = (hash[6] + g) >>> 0;
+    hash[7] = (hash[7] + h) >>> 0;
+  }
+
+  return hash.map((value) => value.toString(16).padStart(8, "0")).join("");
+}
+
+function rightRotate(value, bits) {
+  return (value >>> bits) | (value << (32 - bits));
+}
+
+async function sha256BytesHex(bytes) {
+  if (window.crypto?.subtle) {
+    try {
+      const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+      return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    } catch {
+      // Fall through to the local implementation when WebView blocks subtle crypto on file://.
+    }
+  }
+  return sha256BytesFallback(bytes);
+}
+
+function parseZipEntries(bytes) {
+  const view = viewForBytes(bytes);
+  const maxSearch = Math.max(0, bytes.length - 0xffff - 22);
+  let eocdOffset = -1;
+  for (let offset = bytes.length - 22; offset >= maxSearch; offset -= 1) {
+    if (view.getUint32(offset, true) === 0x06054b50) {
+      eocdOffset = offset;
+      break;
+    }
+  }
+  if (eocdOffset < 0) throw new Error("找不到 APK ZIP 中央目錄。");
+
+  const entryCount = view.getUint16(eocdOffset + 10, true);
+  const centralDirectoryOffset = view.getUint32(eocdOffset + 16, true);
+  const entries = [];
+  const entryMap = new Map();
+  let offset = centralDirectoryOffset;
+
+  for (let index = 0; index < entryCount; index += 1) {
+    if (view.getUint32(offset, true) !== 0x02014b50) break;
+    const method = view.getUint16(offset + 10, true);
+    const compressedSize = view.getUint32(offset + 20, true);
+    const size = view.getUint32(offset + 24, true);
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const localHeaderOffset = view.getUint32(offset + 42, true);
+    const name = decodeUtf8(bytes.subarray(offset + 46, offset + 46 + nameLength));
+    const entry = { name, method, compressedSize, size, localHeaderOffset };
+    entries.push(entry);
+    entryMap.set(name, entry);
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+
+  return { bytes, entries, entryMap };
+}
+
+async function inflateZipBytes(compressedBytes) {
+  if (typeof DecompressionStream === "undefined") {
+    throw new Error("目前瀏覽器不支援 APK 解壓縮，請改用新版助手 APK 或桌機瀏覽器。");
+  }
+
+  const formats = ["deflate-raw", "deflate"];
+  for (const format of formats) {
+    try {
+      const stream = new Blob([compressedBytes]).stream().pipeThrough(new DecompressionStream(format));
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    } catch {
+      // Try the next compatible browser format.
+    }
+  }
+  throw new Error("APK 內部壓縮資料解壓縮失敗。");
+}
+
+async function readZipEntryBytes(zip, entryName) {
+  const entry = zip.entryMap.get(entryName);
+  if (!entry) return null;
+  const view = viewForBytes(zip.bytes);
+  const offset = entry.localHeaderOffset;
+  if (view.getUint32(offset, true) !== 0x04034b50) throw new Error(`APK 項目格式錯誤：${entryName}`);
+  const nameLength = view.getUint16(offset + 26, true);
+  const extraLength = view.getUint16(offset + 28, true);
+  const dataOffset = offset + 30 + nameLength + extraLength;
+  const compressedBytes = zip.bytes.subarray(dataOffset, dataOffset + entry.compressedSize);
+  if (entry.method === 0) return compressedBytes;
+  if (entry.method === 8) return inflateZipBytes(compressedBytes);
+  throw new Error(`APK 項目使用不支援的壓縮方式：${entry.method}`);
+}
+
+function readUtf8Length(bytes, offset) {
+  const first = bytes[offset];
+  if ((first & 0x80) === 0) return { value: first, next: offset + 1 };
+  return { value: ((first & 0x7f) << 8) | bytes[offset + 1], next: offset + 2 };
+}
+
+function readUtf16Length(view, offset) {
+  const first = view.getUint16(offset, true);
+  if ((first & 0x8000) === 0) return { value: first, next: offset + 2 };
+  return { value: ((first & 0x7fff) << 16) | view.getUint16(offset + 2, true), next: offset + 4 };
+}
+
+function parseAndroidStringPool(bytes, offset = 0) {
+  const view = viewForBytes(bytes);
+  if (view.getUint16(offset, true) !== 0x0001) throw new Error("Android 字串表格式錯誤。");
+  const stringCount = view.getUint32(offset + 8, true);
+  const flags = view.getUint32(offset + 16, true);
+  const stringsStart = view.getUint32(offset + 20, true);
+  const isUtf8 = (flags & 0x00000100) !== 0;
+  const strings = [];
+
+  for (let index = 0; index < stringCount; index += 1) {
+    const stringOffset = offset + stringsStart + view.getUint32(offset + 28 + index * 4, true);
+    if (isUtf8) {
+      const utf16Length = readUtf8Length(bytes, stringOffset);
+      const utf8Length = readUtf8Length(bytes, utf16Length.next);
+      strings.push(decodeUtf8(bytes.subarray(utf8Length.next, utf8Length.next + utf8Length.value)));
+    } else {
+      const length = readUtf16Length(view, stringOffset);
+      strings.push(decodeUtf16Le(bytes.subarray(length.next, length.next + length.value * 2)));
+    }
+  }
+
+  return {
+    strings,
+    size: view.getUint32(offset + 4, true)
+  };
+}
+
+function decodeAndroidTypedValue(dataType, data, strings) {
+  switch (dataType) {
+    case 0x01:
+      return `@0x${(data >>> 0).toString(16).padStart(8, "0")}`;
+    case 0x03:
+      return strings[data] || "";
+    case 0x10:
+      return String(data | 0);
+    case 0x11:
+      return `0x${(data >>> 0).toString(16)}`;
+    case 0x12:
+      return data ? "true" : "false";
+    default:
+      return data ? String(data) : "";
+  }
+}
+
+function parseAndroidBinaryXml(bytes) {
+  const view = viewForBytes(bytes);
+  if (view.getUint16(0, true) !== 0x0003) throw new Error("AndroidManifest.xml 不是 APK 二進位 XML。");
+  const fileSize = view.getUint32(4, true);
+  const elements = [];
+  let strings = [];
+  let offset = view.getUint16(2, true);
+
+  while (offset + 8 <= Math.min(fileSize, bytes.length)) {
+    const chunkType = view.getUint16(offset, true);
+    const headerSize = view.getUint16(offset + 2, true);
+    const chunkSize = view.getUint32(offset + 4, true);
+    if (chunkSize <= 0) break;
+
+    if (chunkType === 0x0001) {
+      strings = parseAndroidStringPool(bytes, offset).strings;
+    } else if (chunkType === 0x0102) {
+      const nameIndex = view.getUint32(offset + 20, true);
+      const attributeStart = view.getUint16(offset + 24, true);
+      const attributeSize = view.getUint16(offset + 26, true);
+      const attributeCount = view.getUint16(offset + 28, true);
+      const attributes = {};
+
+      for (let index = 0; index < attributeCount; index += 1) {
+        const attrOffset = offset + 16 + attributeStart + index * attributeSize;
+        const namespaceIndex = view.getUint32(attrOffset, true);
+        const attrNameIndex = view.getUint32(attrOffset + 4, true);
+        const rawValueIndex = view.getUint32(attrOffset + 8, true);
+        const dataType = view.getUint8(attrOffset + 15);
+        const data = view.getUint32(attrOffset + 16, true);
+        const attrName = strings[attrNameIndex] || "";
+        const rawValue = rawValueIndex === 0xffffffff ? "" : (strings[rawValueIndex] || "");
+        const value = rawValue || decodeAndroidTypedValue(dataType, data, strings);
+        attributes[attrName] = {
+          name: attrName,
+          namespace: namespaceIndex === 0xffffffff ? "" : (strings[namespaceIndex] || ""),
+          rawValue,
+          value,
+          dataType,
+          data
+        };
+      }
+
+      elements.push({
+        name: strings[nameIndex] || "",
+        attributes
+      });
+    }
+
+    offset += chunkSize || headerSize || 8;
+  }
+
+  return elements;
+}
+
+function parseAndroidResourceTable(bytes) {
+  const view = viewForBytes(bytes);
+  if (view.getUint16(0, true) !== 0x0002) return null;
+  const tableSize = view.getUint32(4, true);
+  let offset = view.getUint16(2, true);
+  let globalStrings = [];
+  const resources = new Map();
+
+  while (offset + 8 <= Math.min(tableSize, bytes.length)) {
+    const type = view.getUint16(offset, true);
+    const size = view.getUint32(offset + 4, true);
+    if (size <= 0) break;
+
+    if (type === 0x0001 && !globalStrings.length) {
+      globalStrings = parseAndroidStringPool(bytes, offset).strings;
+    } else if (type === 0x0200) {
+      parseAndroidResourcePackage(bytes, offset, size, globalStrings, resources);
+    }
+
+    offset += size;
+  }
+
+  return resources;
+}
+
+function parseAndroidResourcePackage(bytes, packageOffset, packageSize, globalStrings, resources) {
+  const view = viewForBytes(bytes);
+  const packageId = view.getUint32(packageOffset + 8, true) & 0xff;
+  const headerSize = view.getUint16(packageOffset + 2, true);
+  const typeStringsOffset = view.getUint32(packageOffset + 268, true);
+  const keyStringsOffset = view.getUint32(packageOffset + 276, true);
+  const typeStrings = typeStringsOffset ? parseAndroidStringPool(bytes, packageOffset + typeStringsOffset).strings : [];
+  const keyStrings = keyStringsOffset ? parseAndroidStringPool(bytes, packageOffset + keyStringsOffset).strings : [];
+  let offset = packageOffset + headerSize;
+  const end = packageOffset + packageSize;
+
+  while (offset + 8 <= end) {
+    const chunkType = view.getUint16(offset, true);
+    const chunkSize = view.getUint32(offset + 4, true);
+    if (chunkSize <= 0) break;
+
+    if (chunkType === 0x0201) {
+      const typeId = view.getUint8(offset + 8);
+      const entryCount = view.getUint32(offset + 12, true);
+      const entriesStart = view.getUint32(offset + 16, true);
+      const offsetsStart = offset + view.getUint16(offset + 2, true);
+      const typeName = typeStrings[typeId - 1] || "";
+
+      for (let entryIndex = 0; entryIndex < entryCount; entryIndex += 1) {
+        const entryRelativeOffset = view.getUint32(offsetsStart + entryIndex * 4, true);
+        if (entryRelativeOffset === 0xffffffff) continue;
+        const entryOffset = offset + entriesStart + entryRelativeOffset;
+        const entrySize = view.getUint16(entryOffset, true);
+        const flags = view.getUint16(entryOffset + 2, true);
+        const keyIndex = view.getUint32(entryOffset + 4, true);
+        if ((flags & 0x0001) !== 0) continue;
+        const valueOffset = entryOffset + entrySize;
+        const dataType = view.getUint8(valueOffset + 3);
+        const data = view.getUint32(valueOffset + 4, true);
+        const value = decodeAndroidTypedValue(dataType, data, globalStrings);
+        const resourceId = (((packageId << 24) | (typeId << 16) | entryIndex) >>> 0);
+        const current = resources.get(resourceId) || {
+          id: resourceId,
+          typeName,
+          keyName: keyStrings[keyIndex] || "",
+          values: []
+        };
+        current.values.push({ dataType, data, value });
+        resources.set(resourceId, current);
+      }
+    }
+
+    offset += chunkSize;
+  }
+}
+
+function getAndroidXmlAttr(element, attrName) {
+  return element?.attributes?.[attrName] || null;
+}
+
+function getAndroidXmlAttrValue(element, attrName) {
+  return getAndroidXmlAttr(element, attrName)?.value || "";
+}
+
+function getResourceIdFromAttribute(attribute) {
+  if (!attribute) return 0;
+  if (attribute.dataType === 0x01) return attribute.data >>> 0;
+  const text = String(attribute.rawValue || attribute.value || "");
+  const hexMatch = text.match(/^@0x([0-9a-f]+)$/i);
+  if (hexMatch) return Number.parseInt(hexMatch[1], 16) >>> 0;
+  const decimalMatch = text.match(/^@(\d+)$/);
+  return decimalMatch ? (Number.parseInt(decimalMatch[1], 10) >>> 0) : 0;
+}
+
+function getResourceValues(resourceTable, resourceId) {
+  if (!resourceTable || !resourceId) return [];
+  return resourceTable.get(resourceId)?.values || [];
+}
+
+function resolveResourceString(resourceTable, attribute) {
+  const rawText = String(attribute?.rawValue || attribute?.value || "").trim();
+  if (rawText && !rawText.startsWith("@")) return rawText;
+  const values = getResourceValues(resourceTable, getResourceIdFromAttribute(attribute));
+  const resolved = values
+    .map((item) => String(item.value || "").trim())
+    .find((value) => value && !value.startsWith("res/") && !value.startsWith("@"));
+  return resolved || "";
+}
+
+function getResourceIconPaths(resourceTable, resourceId) {
+  return getResourceValues(resourceTable, resourceId)
+    .map((item) => String(item.value || "").trim())
+    .filter((value) => /^res\/.+\.(png|webp|jpg|jpeg)$/i.test(value));
+}
+
+function normalizeAndroidInteger(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (/^0x[0-9a-f]+$/i.test(text)) return String(Number.parseInt(text.slice(2), 16));
+  return text;
+}
+
+function getResourceNameIconPaths(zip, attribute, resourceTable) {
+  const paths = [];
+  const rawText = String(attribute?.rawValue || attribute?.value || "").trim();
+  const nameMatch = rawText.match(/^@([a-z0-9_]+)\/([a-z0-9_.-]+)$/i);
+  if (nameMatch) {
+    const [, typeName, keyName] = nameMatch;
+    const pattern = new RegExp(`^res/${typeName}[^/]*/${escapeRegExp(keyName)}\\.(png|webp|jpg|jpeg)$`, "i");
+    paths.push(...zip.entries.map((entry) => entry.name).filter((name) => pattern.test(name)));
+  }
+
+  const resource = resourceTable?.get(getResourceIdFromAttribute(attribute));
+  if (resource?.keyName) {
+    const pattern = new RegExp(`^res/(mipmap|drawable)[^/]*/${escapeRegExp(resource.keyName)}\\.(png|webp|jpg|jpeg)$`, "i");
+    paths.push(...zip.entries.map((entry) => entry.name).filter((name) => pattern.test(name)));
+  }
+  return [...new Set(paths)];
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function scoreIconPath(path, entry, explicit) {
+  const lower = path.toLowerCase();
+  let score = explicit ? 200 : 0;
+  if (lower.includes("/mipmap")) score += 30;
+  if (lower.includes("ic_launcher")) score += 90;
+  if (lower.includes("app_icon")) score += 80;
+  if (lower.includes("icon")) score += 65;
+  if (lower.includes("logo")) score += 45;
+  if (lower.includes("xxxhdpi")) score += 36;
+  if (lower.includes("xxhdpi")) score += 30;
+  if (lower.includes("xhdpi")) score += 24;
+  if (lower.includes("hdpi")) score += 18;
+  if (lower.includes("mdpi")) score += 12;
+  if (/\.(webp|png)$/i.test(lower)) score += 20;
+  if (/background|splash|banner|wide|notification/i.test(lower)) score -= 100;
+  score += Math.min(50, Math.round((entry?.size || 0) / 4096));
+  return score;
+}
+
+function chooseBestIconEntry(zip, explicitPaths = []) {
+  const explicitSet = new Set(explicitPaths);
+  const candidates = (explicitPaths.length ? explicitPaths : zip.entries.map((entry) => entry.name))
+    .map((name) => zip.entryMap.get(name))
+    .filter((entry) => entry && /^res\/(mipmap|drawable)[^/]*\/.+\.(png|webp|jpg|jpeg)$/i.test(entry.name));
+
+  if (!candidates.length && explicitPaths.length) return chooseBestIconEntry(zip, []);
+  return candidates
+    .map((entry) => ({
+      entry,
+      score: scoreIconPath(entry.name, entry, explicitSet.has(entry.name))
+    }))
+    .sort((left, right) => right.score - left.score)[0]?.entry || null;
+}
+
+async function extractApkIconFile(zip, metadata, resourceTable) {
+  const iconAttribute = metadata.iconAttribute || metadata.roundIconAttribute;
+  const explicitPaths = [
+    ...getResourceIconPaths(resourceTable, getResourceIdFromAttribute(iconAttribute)),
+    ...getResourceNameIconPaths(zip, iconAttribute, resourceTable)
+  ];
+  const entry = chooseBestIconEntry(zip, [...new Set(explicitPaths)]);
+  if (!entry) return null;
+  const iconBytes = await readZipEntryBytes(zip, entry.name);
+  if (!iconBytes?.length) return null;
+  const extension = getFileExtension(entry.name, "png");
+  const mimeType = getImageMimeType(entry.name);
+  const baseName = normalizeUpdateItemId(metadata.packageName || metadata.appName || "apk-icon");
+  return {
+    name: `${baseName}-icon.${extension}`,
+    type: mimeType,
+    size: iconBytes.length,
+    sizeLabel: formatFileSize(iconBytes.length),
+    dataUrl: bytesToDataUrl(iconBytes, mimeType),
+    sourcePath: entry.name
+  };
+}
+
+function sdkToAndroidLabel(sdkValue) {
+  const sdk = Number(sdkValue || 0);
+  const labels = {
+    21: "Android 5.0", 22: "Android 5.1", 23: "Android 6.0", 24: "Android 7.0",
+    25: "Android 7.1", 26: "Android 8.0", 27: "Android 8.1", 28: "Android 9",
+    29: "Android 10", 30: "Android 11", 31: "Android 12", 32: "Android 12L",
+    33: "Android 13", 34: "Android 14", 35: "Android 15", 36: "Android 16"
+  };
+  if (!sdk) return "";
+  return labels[sdk] ? `${labels[sdk]} (SDK ${sdk})` : `SDK ${sdk}`;
+}
+
+function inferUpdateCategory(info = {}) {
+  const text = `${info.packageName || ""} ${info.appName || ""}`.toLowerCase();
+  if (/youtube|netflix|disney|video|tv|player|kodi|music|spotify|影音|影視|播放/.test(text)) return "影音播放";
+  if (/map|nav|gps|waze|kingway|speed|camera|導航|地圖|測速/.test(text)) return "導航地圖";
+  if (/keyboard|inputmethod|zhuyin|gboard|ime|輸入/.test(text)) return "輸入法";
+  if (/car|auto|vehicle|obd|dashcam|recorder|車機|行車/.test(text)) return "車機輔助";
+  if (/tool|manager|file|browser|settings|system|gms|microg|service/.test(text)) return "系統工具";
+  return "其他應用";
+}
+
+function buildAutoUpdateDescription(info = {}) {
+  const name = info.appName || "此 App";
+  const version = info.versionName ? `版本 ${info.versionName}` : (info.versionCode ? `版本碼 ${info.versionCode}` : "版本資訊已讀取");
+  return `${name} APK，${version}，已自動讀取套件名稱、容量、SDK 與 SHA-256，可在車機更新中心下載安裝。`;
+}
+
+function extractUpdateApkMetadataFromManifest(elements, resourceTable, file) {
+  const manifest = elements.find((item) => item.name === "manifest") || {};
+  const usesSdk = elements.find((item) => item.name === "uses-sdk") || {};
+  const application = elements.find((item) => item.name === "application") || {};
+  const labelAttribute = getAndroidXmlAttr(application, "label");
+  const iconAttribute = getAndroidXmlAttr(application, "icon");
+  const roundIconAttribute = getAndroidXmlAttr(application, "roundIcon");
+  const minSdk = normalizeAndroidInteger(getAndroidXmlAttrValue(usesSdk, "minSdkVersion"));
+  const targetSdk = normalizeAndroidInteger(getAndroidXmlAttrValue(usesSdk, "targetSdkVersion"));
+  const appName = resolveResourceString(resourceTable, labelAttribute)
+    || String(file?.name || "").replace(/\.apk$/i, "");
+
+  return {
+    packageName: getAndroidXmlAttrValue(manifest, "package"),
+    versionName: getAndroidXmlAttrValue(manifest, "versionName"),
+    versionCode: normalizeAndroidInteger(getAndroidXmlAttrValue(manifest, "versionCode")),
+    minSdk,
+    minAndroid: sdkToAndroidLabel(minSdk),
+    targetSdk,
+    appName,
+    iconAttribute,
+    roundIconAttribute
+  };
+}
+
+function readNativeApkMetadata(file) {
+  const inspector = window.ShenYueUpdater?.inspectLastSelectedApk;
+  if (typeof inspector !== "function") return null;
+  try {
+    const result = parseNativeResult(inspector.call(window.ShenYueUpdater, file?.name || ""));
+    return result?.ok ? result : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readApkMetadata(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const sha256 = await sha256BytesHex(bytes);
+  const nativeInfo = readNativeApkMetadata(file);
+  if (nativeInfo?.packageName && nativeInfo?.versionCode) {
+    return {
+      metadata: {
+        ...nativeInfo,
+        sha256,
+        sizeLabel: formatFileSize(file.size),
+        minAndroid: nativeInfo.minAndroid || sdkToAndroidLabel(nativeInfo.minSdk)
+      },
+      iconFile: nativeInfo.iconDataUrl ? {
+        name: `${normalizeUpdateItemId(nativeInfo.packageName || nativeInfo.appName || file.name)}-icon.png`,
+        type: "image/png",
+        size: 0,
+        sizeLabel: "",
+        dataUrl: nativeInfo.iconDataUrl
+      } : null
+    };
+  }
+
+  const zip = parseZipEntries(bytes);
+  const manifestBytes = await readZipEntryBytes(zip, "AndroidManifest.xml");
+  if (!manifestBytes) throw new Error("APK 裡找不到 AndroidManifest.xml。");
+  const elements = parseAndroidBinaryXml(manifestBytes);
+  const resourcesBytes = await readZipEntryBytes(zip, "resources.arsc").catch(() => null);
+  const resourceTable = resourcesBytes ? parseAndroidResourceTable(resourcesBytes) : null;
+  const metadata = extractUpdateApkMetadataFromManifest(elements, resourceTable, file);
+  metadata.sha256 = sha256;
+  metadata.sizeLabel = formatFileSize(file.size);
+  const iconFile = await extractApkIconFile(zip, metadata, resourceTable).catch(() => null);
+  return { metadata, iconFile };
+}
+
+function setAutoDetectedFormValue(name, value, overwrite = true) {
+  const field = updateUploadForm?.elements[name];
+  if (!field || value === undefined || value === null || value === "") return;
+  if (!overwrite && hasText(field.value)) return;
+  if (field.tagName === "SELECT" && ![...field.options].some((option) => option.value === String(value))) {
+    field.add(new Option(String(value), String(value)));
+  }
+  field.value = String(value);
+}
+
+function clearExtractedApkIconPreview() {
+  const preview = updateUploadForm?.querySelector('[data-upload-preview="apkIcon"]');
+  if (preview) {
+    preview.hidden = true;
+    preview.replaceChildren();
+  }
+  const iconField = updateUploadForm?.elements.iconUrl;
+  if (iconField?.dataset.pendingUpload === "apkIcon") clearPendingUploadField(iconField, true);
+}
+
+function renderExtractedApkIconPreview(iconFile) {
+  const fieldWrap = updateUploadForm?.elements.iconUrl?.closest(".update-upload-field");
+  if (!fieldWrap || !iconFile?.dataUrl) return;
+  let preview = fieldWrap.querySelector('[data-upload-preview="apkIcon"]');
+  if (!preview) {
+    preview = document.createElement("div");
+    preview.className = "upload-preview";
+    preview.dataset.uploadPreview = "apkIcon";
+    fieldWrap.append(preview);
+  }
+  preview.replaceChildren();
+
+  const image = document.createElement("img");
+  image.src = iconFile.dataUrl;
+  image.alt = "APK 自動擷取圖標預覽";
+  preview.append(image);
+
+  const text = document.createElement("div");
+  const title = document.createElement("strong");
+  const detail = document.createElement("span");
+  title.textContent = "已從 APK 自動擷取圖標";
+  detail.textContent = iconFile.sourcePath || iconFile.name || "APK icon";
+  text.append(title, detail);
+  preview.append(text);
+  preview.hidden = false;
+}
+
+function setExtractedApkIconField(iconFile) {
+  const iconField = updateUploadForm?.elements.iconUrl;
+  const manualIconFile = updateUploadForm?.elements.iconFile?.files?.[0];
+  if (!iconField || manualIconFile) return;
+  if (!iconFile?.dataUrl) {
+    clearExtractedApkIconPreview();
+    return;
+  }
+  if (iconField.dataset.pendingUpload !== "apkIcon") {
+    iconField.dataset.previousUploadValue = iconField.value || "";
+  }
+  iconField.dataset.pendingUpload = "apkIcon";
+  iconField.classList.add("has-pending-upload");
+  iconField.value = `已從 APK 自動擷取圖標：${iconFile.name || "icon.png"}`;
+  renderExtractedApkIconPreview(iconFile);
+}
+
+function applyUpdateUploadApkInfo(parsed, file) {
+  if (!updateUploadForm || !parsed?.metadata) return;
+  const metadata = parsed.metadata;
+  const appName = metadata.appName || String(file?.name || "").replace(/\.apk$/i, "");
+  const inferred = { ...metadata, appName };
+  setAutoDetectedFormValue("appName", appName);
+  setAutoDetectedFormValue("sizeLabel", metadata.sizeLabel || formatFileSize(file?.size));
+  setAutoDetectedFormValue("packageName", metadata.packageName);
+  setAutoDetectedFormValue("versionName", metadata.versionName);
+  setAutoDetectedFormValue("versionCode", metadata.versionCode);
+  setAutoDetectedFormValue("minAndroid", metadata.minAndroid || sdkToAndroidLabel(metadata.minSdk));
+  setAutoDetectedFormValue("targetSdk", metadata.targetSdk);
+  setAutoDetectedFormValue("sha256", metadata.sha256);
+  setAutoDetectedFormValue("category", inferUpdateCategory(inferred), false);
+  setAutoDetectedFormValue("description", buildAutoUpdateDescription(inferred), false);
+  setExtractedApkIconField(parsed.iconFile);
+
+  const extra = updateUploadForm.querySelector(".update-upload-extra");
+  if (extra && (metadata.minAndroid || metadata.minSdk || metadata.targetSdk || metadata.sha256)) {
+    extra.open = true;
+  }
+}
+
+async function inspectUpdateUploadApk(file, options = {}) {
+  if (!file) return null;
+  const signature = getUploadFileSignature(file);
+  if (!options.force && lastParsedUploadApk?.signature === signature && lastParsedUploadApk.ok) {
+    return lastParsedUploadApk;
+  }
+
+  const requestId = ++updateUploadApkInspectionId;
+  if (!options.silent) setUpdateUploadStatus("正在自動讀取 APK 資訊...", "working");
+
+  try {
+    const parsed = await readApkMetadata(file);
+    if (requestId !== updateUploadApkInspectionId) return null;
+    lastParsedUploadApk = { ok: true, signature, ...parsed };
+    applyUpdateUploadApkInfo(lastParsedUploadApk, file);
+    const fields = [
+      parsed.metadata.packageName ? "套件名稱" : "",
+      parsed.metadata.versionCode ? "版本碼" : "",
+      parsed.metadata.versionName ? "版本名稱" : "",
+      parsed.metadata.sha256 ? "SHA-256" : "",
+      parsed.iconFile ? "圖標" : ""
+    ].filter(Boolean).join("、");
+    setUpdateUploadStatus(`APK 已自動讀取：${fields || "基本資料"}。只需要再選第一張圖片與第二張圖片即可。`, "success");
+    return lastParsedUploadApk;
+  } catch (error) {
+    if (requestId !== updateUploadApkInspectionId) return null;
+    lastParsedUploadApk = { ok: false, signature, error };
+    setUpdateUploadStatus(`APK 自動讀取失敗：${error.message || error}。仍可手動填寫必要欄位後上傳。`, "error");
+    return lastParsedUploadApk;
+  }
+}
+
+async function ensureUpdateUploadApkInspection(file) {
+  if (!file) return null;
+  const signature = getUploadFileSignature(file);
+  if (lastParsedUploadApk?.signature === signature) return lastParsedUploadApk;
+  return inspectUpdateUploadApk(file, { silent: true });
+}
+
 function getInlineUploadLimit(kind) {
   return kind === "apk" ? maxInlineApkUploadBytes : maxInlineImageUploadBytes;
 }
@@ -580,6 +1323,12 @@ function renderPendingUploadPreview(input, file) {
 
 function removePendingUploadDisplayValues(data = {}) {
   if (!updateUploadForm) return data;
+  Object.keys(data).forEach((key) => {
+    const field = updateUploadForm.elements[key];
+    if (field?.classList?.contains("has-pending-upload")) {
+      data[key] = "";
+    }
+  });
   Object.entries(updateUploadFileTargets).forEach(([inputName, target]) => {
     const file = updateUploadForm.elements[inputName]?.files?.[0];
     if (!file || !target.fieldName) return;
@@ -807,14 +1556,16 @@ function renderUploadedUpdatePreview(item) {
 
 async function saveAndUploadUpdateApp() {
   if (!updateUploadForm) return;
+  const apkInput = updateUploadForm.elements.apkFile;
+  const apkFile = apkInput?.files?.[0] || null;
+  const parsedApk = apkFile ? await ensureUpdateUploadApkInspection(apkFile) : null;
+
   if (!updateUploadForm.checkValidity()) {
     updateUploadForm.reportValidity();
     return;
   }
 
   const data = getUpdateUploadData();
-  const apkInput = updateUploadForm.elements.apkFile;
-  const apkFile = apkInput?.files?.[0] || null;
   const submitButton = updateUploadForm.querySelector("[data-save-update-upload]");
   const isEditMode = Boolean(data.manifestId);
   const existingItem = getExistingUploadItem(data);
@@ -846,7 +1597,7 @@ async function saveAndUploadUpdateApp() {
     }
 
     const files = {
-      icon: await readUploadFile(updateUploadForm.elements.iconFile?.files?.[0], "image"),
+      icon: await readUploadFile(updateUploadForm.elements.iconFile?.files?.[0], "image") || (parsedApk?.ok ? parsedApk.iconFile : null),
       firstImage: await readUploadFile(updateUploadForm.elements.firstImageFile?.files?.[0], "image"),
       secondImage: await readUploadFile(updateUploadForm.elements.secondImageFile?.files?.[0], "image"),
       apk: mergedData.apkUrl ? null : await readUploadFile(apkFile, "apk")
@@ -897,15 +1648,24 @@ function syncUpdateUploadFileLabels() {
       if (textNode) textNode.textContent = file ? "重新選擇" : label.dataset.defaultLabel;
       label.title = file?.name || "";
       label.dataset.hasFile = file ? "true" : "false";
+      if (input.name === "apkFile" && !file) {
+        lastParsedUploadApk = null;
+        clearExtractedApkIconPreview();
+      }
+      if (input.name === "iconFile" && file) {
+        clearExtractedApkIconPreview();
+      }
       if (file && target) {
-        try {
-          assertInlineUploadSize(file, target.kind);
-        } catch (error) {
-          input.value = "";
-          setPendingUploadFieldState(input, null);
-          renderPendingUploadPreview(input, null);
-          setUpdateUploadStatus(error.message || String(error), "error");
-          return;
+        if (target.kind !== "apk") {
+          try {
+            assertInlineUploadSize(file, target.kind);
+          } catch (error) {
+            input.value = "";
+            setPendingUploadFieldState(input, null);
+            renderPendingUploadPreview(input, null);
+            setUpdateUploadStatus(error.message || String(error), "error");
+            return;
+          }
         }
       }
       setPendingUploadFieldState(input, file);
@@ -920,8 +1680,12 @@ function syncUpdateUploadFileLabels() {
         if (hasApkUrl) {
           setUpdateUploadStatus("已填 APK 下載地址，送出時會使用網址並略過右側 APK 檔案。");
         } else if (file.size > maxInlineApkUploadBytes) {
-          setUpdateUploadStatus(`APK 檔案 ${formatFileSize(file.size)} 太大，請先上傳到免費空間，再把直接下載網址貼到「應用下載地址」。`, "error");
+          void inspectUpdateUploadApk(file).then(() => {
+            setUpdateUploadStatus(`APK 資訊已讀取，但檔案 ${formatFileSize(file.size)} 太大，請先上傳到 GitHub Releases 或雲端空間，再把直接下載網址貼到「應用下載地址」。`, "error");
+          });
+          return;
         }
+        void inspectUpdateUploadApk(file);
       }
     };
     if (!input.dataset.labelReady) {
@@ -936,6 +1700,8 @@ function syncUpdateUploadFileLabels() {
       const silentReset = updateUploadForm.dataset.silentReset === "true";
       delete updateUploadForm.dataset.silentReset;
       window.setTimeout(() => {
+        lastParsedUploadApk = null;
+        clearExtractedApkIconPreview();
         clearAllPendingUploadFields(false);
         if (!silentReset) setUpdateUploadMode("new");
         syncUpdateUploadFileLabels();

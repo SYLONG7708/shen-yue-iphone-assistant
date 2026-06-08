@@ -169,12 +169,12 @@
 
           <label for="update-upload-icon">應用圖標</label>
           <div class="update-upload-field">
-            <input id="update-upload-icon" name="iconUrl" type="text" placeholder="可填圖片網址，或使用右側圖片上傳">
+            <input id="update-upload-icon" name="iconUrl" type="text" placeholder="可留空，選 APK 後會自動擷取圖標">
             <label class="upload-button">圖片上傳<input name="iconFile" type="file" accept="image/*"></label>
           </div>
 
           <label for="update-upload-name">應用名稱</label>
-          <input id="update-upload-name" name="appName" type="text" placeholder="可留空，建議輸入應用名稱">
+          <input id="update-upload-name" name="appName" type="text" placeholder="選 APK 後自動讀取應用名稱">
 
           <label for="update-upload-category">類別名稱</label>
           <select id="update-upload-category" name="category">
@@ -189,7 +189,7 @@
           </select>
 
           <label for="update-upload-description">應用介紹</label>
-          <textarea id="update-upload-description" name="description" placeholder="可留空，建議輸入應用介紹、用途或更新說明"></textarea>
+          <textarea id="update-upload-description" name="description" placeholder="選 APK 後會自動產生基本介紹，也可自行修改"></textarea>
 
           <label for="update-upload-first-image">第一張圖片</label>
           <div class="update-upload-field">
@@ -208,19 +208,19 @@
             <input id="update-upload-apk" name="apkUrl" type="text" placeholder="貼 APK 直接下載地址；大檔請先放免費空間">
             <label class="upload-button">小 APK 上傳<input name="apkFile" type="file" accept=".apk,application/vnd.android.package-archive"></label>
           </div>
-          <p class="update-upload-hint">修改既有 App 時可只改名稱，不用重新填 APK 網址；新增 App 時才需要下載地址或小型 APK 檔案。</p>
+          <p class="update-upload-hint">新增 App 時只要選 APK、第一張圖片與第二張圖片；圖標、名稱、容量、套件、版本、SDK 與 SHA-256 會自動讀取。</p>
 
           <label for="update-upload-size">App 容量</label>
-          <input id="update-upload-size" name="sizeLabel" type="text" placeholder="請輸入大小，例如 41.6 MB">
+          <input id="update-upload-size" name="sizeLabel" type="text" placeholder="選 APK 後自動讀取容量">
 
           <label for="update-upload-package">套件名稱</label>
-          <input id="update-upload-package" name="packageName" type="text" placeholder="例如 com.example.app" required>
+          <input id="update-upload-package" name="packageName" type="text" placeholder="選 APK 後自動讀取套件名稱" required>
 
           <label for="update-upload-version-name">版本名稱</label>
-          <input id="update-upload-version-name" name="versionName" type="text" placeholder="例如 1.0.0">
+          <input id="update-upload-version-name" name="versionName" type="text" placeholder="選 APK 後自動讀取版本名稱">
 
           <label for="update-upload-version-code">版本碼</label>
-          <input id="update-upload-version-code" name="versionCode" type="number" inputmode="numeric" min="1" step="1" placeholder="例如 100" required>
+          <input id="update-upload-version-code" name="versionCode" type="number" inputmode="numeric" min="1" step="1" placeholder="選 APK 後自動讀取版本碼" required>
 
           <details class="update-upload-extra">
             <summary>進階更新資訊</summary>

@@ -3,13 +3,14 @@
 ## 本次版本
 
 - 版本：1.0.8
-- 重點：更新中心補上 Android APK 內檔案選擇器，圖片與小型 APK 可送 Google Apps Script；大型 APK 提供 GitHub Releases 發布工具。
+- 重點：更新中心補上 APK 自動偵測；只要選 APK、第一張圖片、第二張圖片，其餘 App 資訊會自動帶入。
 - 支援：套件名維持 `tw.com.shenyue.assistant`，可覆蓋更新原本雲端版或 APK 版 App。
 
 ## 更新中心上傳
 
 - 更新中心頁面新增繁體中文表格式上傳表單。
-- 可填寫應用圖標、應用名稱、類別名稱、應用介紹、兩張圖片、APK 下載地址或小型 APK 檔案、App 容量、套件名稱與版本碼。
+- 新增 App 時選 APK、第一張圖片、第二張圖片即可；應用圖標、應用名稱、類別、介紹、App 容量、套件名稱、版本名稱、版本碼、最低 Android、目標 SDK 與 SHA-256 會自動偵測。
+- 若 APK 無法在目前瀏覽器解析，仍保留手動填寫欄位作為備援。
 - 按「儲存並上傳」後會送到 Google Apps Script，寫入 `更新中心上傳` 工作表；有選擇圖片或小型 APK 時會保存到 Google Drive。
 - 更新清單可由 Apps Script `?type=updates` 輸出，並自動合併原本 GitHub `updates.json` 內容。
 - 大型 APK 建議使用 `tools/publish-update-app.ps1` 發布到 GitHub Releases，再把產生的 APK 下載網址寫入更新清單。

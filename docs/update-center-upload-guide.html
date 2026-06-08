@@ -63,10 +63,10 @@
       <ol>
         <li>進入「更新」分頁，按「新增應用」。</li>
         <li>輸入管理 PIN：<strong>7708</strong>。</li>
-        <li>填入應用名稱、分類、介紹、APK 下載地址。</li>
-        <li>圖片可直接按「圖片上傳」選檔。</li>
+        <li>選擇 APK 檔案；系統會自動讀取應用名稱、圖標、分類、介紹、容量、套件名稱、版本、SDK 與 SHA-256。</li>
+        <li>第一張圖片與第二張圖片可直接按「圖片上傳」選檔。</li>
         <li>大型 APK 建議不要直接選檔，請先上傳到 GitHub Releases，再把下載網址貼到「應用下載地址」。</li>
-        <li>填入套件名稱與版本碼，這兩個會影響車機是否能判斷更新。</li>
+        <li>套件名稱與版本碼會由 APK 自動帶入；只有解析失敗時才需要手動補填。</li>
         <li>按「儲存並上傳」。資料會送到 Google Apps Script，檔案會保存到 Google Drive。</li>
       </ol>
       <p class="warn">注意：App 內表單適合圖片與小型 APK。正式大量 APK 建議使用方式二。</p>
@@ -95,7 +95,7 @@
       <h3>點圖片上傳或 APK 上傳沒反應</h3>
       <p>舊版 APK 的 WebView 沒有檔案選擇器。新版已修正，需重新安裝新版申悅車機助手 APK。</p>
       <h3>新增後安裝按鈕不能按</h3>
-      <p>請確認有填 <strong>套件名稱</strong>、<strong>版本碼</strong>、<strong>APK 下載地址</strong>。如果只選小 APK 檔案，需等 Apps Script 產生雲端下載網址後重新整理清單。</p>
+      <p>請確認已選 APK，且畫面已自動帶入 <strong>套件名稱</strong> 與 <strong>版本碼</strong>。如果只選小 APK 檔案，需等 Apps Script 產生雲端下載網址後重新整理清單。</p>
       <h3>圖片破圖</h3>
       <p>請確認圖片網址可公開讀取，或使用本機 GitHub 工具把圖片放到本專案的 <code>assets/update-*</code> 目錄。</p>
     </section>

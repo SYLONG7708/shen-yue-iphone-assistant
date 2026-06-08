@@ -1,6 +1,7 @@
 android-wrapper/.gradle/
 android-wrapper/build/
 android-wrapper/app/build/
+android-wrapper/local.properties
 android-wrapper/app/src/builtIn/assets/www/
 .tools/
 *.idsig

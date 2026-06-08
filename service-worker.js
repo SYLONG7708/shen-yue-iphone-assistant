@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v218-image-replace-upload";
+const cacheName = "shen-yue-assistant-v219-apk-auto-detect";
 const assets = [
   "./",
   "./index.html",
