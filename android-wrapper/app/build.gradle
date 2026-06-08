@@ -44,8 +44,8 @@ android {
         applicationId "tw.com.shenyue.assistant"
         minSdk 23
         targetSdk 36
-        versionCode 109
-        versionName "1.0.9"
+        versionCode 110
+        versionName "1.0.10"
     }
 
     flavorDimensions "content"
@@ -55,28 +55,28 @@ android {
             dimension "content"
             applicationIdSuffix ".builtin"
             versionNameSuffix "-built-in"
-            resValue "string", "app_name", "申悅車機助手 內建版"
+            resValue "string", "app_name", "申悅車機助手"
             buildConfigField "String", "HOME_URL", "\"file:///android_asset/www/index.html\""
         }
 
         apk {
             dimension "content"
             versionNameSuffix "-apk"
-            resValue "string", "app_name", "申悅車機助手 APK版"
+            resValue "string", "app_name", "申悅車機助手"
             buildConfigField "String", "HOME_URL", "\"file:///android_asset/www/index.html\""
         }
 
         github {
             dimension "content"
             versionNameSuffix "-cloud"
-            resValue "string", "app_name", "申悅車機助手 雲端版"
+            resValue "string", "app_name", "申悅車機助手"
             buildConfigField "String", "HOME_URL", "\"https://sylong7708.github.io/shen-yue-iphone-assistant/\""
         }
 
         live {
             dimension "content"
             versionNameSuffix "-live"
-            resValue "string", "app_name", "申悅車機助手 即時更新版"
+            resValue "string", "app_name", "申悅車機助手"
             buildConfigField "String", "HOME_URL", "\"https://sylong7708.github.io/shen-yue-iphone-assistant/\""
         }
     }

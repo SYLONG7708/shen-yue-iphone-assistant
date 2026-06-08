@@ -144,7 +144,14 @@ function normalizeCloudEndpoint(value) {
   const text = String(value || "").trim();
   if (!text || legacyCloudEndpoints.has(text)) return defaultCloudEndpoint;
   if (text.includes(defaultCloudDeploymentId)) return defaultCloudEndpoint;
-  if (text.includes("script.google.com/macros/s/")) return defaultCloudEndpoint;
+  try {
+    const url = new URL(text, location.href);
+    if (url.protocol === "https:" && url.hostname === "script.google.com" && url.pathname.includes("/macros/s/")) {
+      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+    }
+  } catch {
+    return text;
+  }
   return text;
 }
 
@@ -412,12 +419,27 @@ async function sendToCloud(payload) {
   const { cloudEndpoint } = getAdminSettings();
   if (!cloudEndpoint) throw new Error("尚未設定 Google Apps Script 雲端網址");
 
-  await fetch(cloudEndpoint, {
+  const response = await fetch(cloudEndpoint, {
     method: "POST",
-    mode: "no-cors",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify(payload)
   });
+  if (!response.ok) throw new Error(`雲端回應 HTTP ${response.status}`);
+
+  const text = await response.text();
+  let result = {};
+  try {
+    result = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error("雲端回應不是 JSON，請確認 Apps Script 已部署為新版網頁應用程式。");
+  }
+  if (result.ok === false) {
+    throw new Error(result.message || "雲端回報上傳失敗。");
+  }
+  if (payload?.type === "update-center-app" && !result.item) {
+    throw new Error("Apps Script 仍是舊版或未部署更新中心功能，沒有回傳更新項目。請重新部署本專案 Code.gs。");
+  }
+  return result;
 }
 
 function setUpdateUploadStatus(message, tone = "") {
@@ -1608,18 +1630,18 @@ async function saveAndUploadUpdateApp() {
       updateUploadForm.elements.sizeLabel.value = mergedData.sizeLabel;
     }
 
-    const localManifestItem = buildUpdateManifestItem(mergedData, files);
-    saveLocalUpdateOverride(localManifestItem);
     const cloudUpdateApp = buildCloudUpdateUploadData(mergedData, files);
-
-    rememberLastUpdateUpload(mergedData, localManifestItem);
-    renderUploadedUpdatePreview(localManifestItem);
-
-    await sendToCloud(getPayload("update-center-app", {
+    const previewManifestItem = buildUpdateManifestItem(mergedData, files);
+    const cloudResult = await sendToCloud(getPayload("update-center-app", {
       updateApp: cloudUpdateApp,
       files
     }));
-    window.setTimeout(() => loadUpdateManifest(true), 1800);
+    const confirmedManifestItem = cloudResult?.item || previewManifestItem;
+
+    saveLocalUpdateOverride(confirmedManifestItem);
+    rememberLastUpdateUpload(mergedData, confirmedManifestItem);
+    renderUploadedUpdatePreview(confirmedManifestItem);
+    window.setTimeout(() => loadUpdateManifest(true), 800);
 
     const actionText = isEditMode ? "修改" : "新增";
     const apkText = mergedData.apkUrl
@@ -1627,7 +1649,7 @@ async function saveAndUploadUpdateApp() {
       : isEditMode
         ? "雲端會沿用同一筆 App 原本的 APK 下載網址；若有選新檔案也會送到 Google Drive。"
         : "小型 APK 檔案已送到 Apps Script，會由 Google Drive 產生下載網址。";
-    setUpdateUploadStatus(`已儲存${actionText}資料並送出雲端同步。${apkText} 請按「重新整理」讀取雲端清單。`, "success");
+    setUpdateUploadStatus(`已儲存${actionText}資料，雲端已回傳更新項目。${apkText} 正在重新讀取雲端清單。`, "success");
   } catch (error) {
     setUpdateUploadStatus(`儲存或上傳失敗：${error.message || error}`, "error");
   } finally {
@@ -2219,45 +2241,63 @@ function loadBundledManifest(remoteError) {
   }
 }
 
+function getUpdateManifestCandidates(primaryUrl) {
+  const urls = [];
+  const seen = new Set();
+  const add = (url) => {
+    const text = String(url || "").trim();
+    if (!text || seen.has(text)) return;
+    seen.add(text);
+    urls.push(text);
+  };
+
+  add(primaryUrl || defaultUpdateManifestUrl);
+  add(getCloudUpdateManifestUrl());
+  add(fallbackUpdateManifestUrl);
+  add(legacyUpdateManifestUrl);
+  add("updates.json");
+  return urls;
+}
+
+async function fetchUpdateManifestFromUrl(manifestUrl) {
+  const response = await fetch(appendQueryParam(manifestUrl, "t", Date.now()), { cache: "no-store" });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const manifest = await response.json();
+  if (!Array.isArray(manifest.apps)) {
+    const detail = manifest?.message ? `：${manifest.message}` : "";
+    throw new Error(`雲端更新清單缺少 apps${detail}`);
+  }
+  return manifest;
+}
+
 async function loadUpdateManifest(force = false) {
   if (!updateStatus || !updateList || !updateUrlInput) return;
   const manifestUrl = updateUrlInput.value.trim() || defaultUpdateManifestUrl;
   localStorage.setItem(updateUrlKey, manifestUrl);
   updateStatus.textContent = "正在讀取雲端更新清單...";
   updateList.innerHTML = "";
+  const errors = [];
 
-  try {
-    const response = await fetch(`${manifestUrl}${manifestUrl.includes("?") ? "&" : "?"}t=${Date.now()}`, { cache: "no-store" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const manifest = await response.json();
-    if (!Array.isArray(manifest.apps)) throw new Error("雲端更新清單格式不正確");
-    const items = manifest.apps;
-    currentUpdateManifestUrl = manifestUrl;
-    updateStatus.textContent = `已讀取 ${items.length} 個更新項目。更新時間：${manifest.updatedAt || "未標示"}`;
-    renderUpdateItems(items);
-  } catch (error) {
-    if (loadBundledManifest(error)) {
+  for (const candidateUrl of getUpdateManifestCandidates(manifestUrl)) {
+    try {
+      const manifest = await fetchUpdateManifestFromUrl(candidateUrl);
+      const items = manifest.apps;
+      currentUpdateManifestUrl = candidateUrl;
+      const sourceText = candidateUrl === manifestUrl ? "雲端清單" : "備用雲端清單";
+      updateStatus.textContent = `已讀取 ${items.length} 個更新項目（${sourceText}）。更新時間：${manifest.updatedAt || "未標示"}`;
+      renderUpdateItems(items);
       return;
+    } catch (error) {
+      errors.push(`${candidateUrl}：${getErrorMessage(error)}`);
     }
-
-    if (manifestUrl !== "updates.json") {
-      try {
-        const fallbackResponse = await fetch(`updates.json?t=${Date.now()}`, { cache: "no-store" });
-        if (!fallbackResponse.ok) throw new Error(`HTTP ${fallbackResponse.status}`);
-        const fallbackManifest = await fallbackResponse.json();
-        const fallbackItems = Array.isArray(fallbackManifest.apps) ? fallbackManifest.apps : [];
-        currentUpdateManifestUrl = "updates.json";
-        updateStatus.textContent = `雲端清單讀取失敗，已使用 APK 內建清單。項目：${fallbackItems.length}`;
-        renderUpdateItems(fallbackItems);
-        return;
-      } catch (fallbackError) {
-        updateStatus.textContent = `雲端與內建清單都讀取失敗：${getErrorMessage(fallbackError)}`;
-      }
-    } else {
-      updateStatus.textContent = `雲端清單讀取失敗：${getErrorMessage(error)}`;
-    }
-    if (force) renderUpdateItems([]);
   }
+
+  if (loadBundledManifest(new Error(errors.join(" / ")))) {
+    return;
+  }
+
+  updateStatus.textContent = `雲端與內建清單都讀取失敗：${errors.join(" / ")}`;
+  if (force) renderUpdateItems([]);
 }
 
 function getInstalledMap(items) {
