@@ -1985,12 +1985,12 @@ function renderRecord() {
 
   recordCard.innerHTML = `
     <h3>${hasText(record.owner) ? escapeHtml(record.owner) : "姓名未設定"}</h3>
-    <p><strong>聯繫電話：</strong>${displayValue(record.phone)}</p>
+    <p><strong>車主電話：</strong>${displayValue(record.phone)}</p>
     <p><strong>車牌號碼：</strong>${displayValue(record.plate)}</p>
-    <p><strong>車款年份：</strong>${displayValue(record.car)}</p>
-    <p><strong>安裝項目：</strong>${displayValue(record.items)}</p>
+    <p><strong>車款年分：</strong>${displayValue(record.car)}</p>
+    <p><strong>其他產品類別：</strong>${displayValue(record.items)}</p>
     <p><strong>主機規格：</strong>${displayValue(record.model || record.productSpec)}</p>
-    <p><strong>總金額：</strong>${amountText ? escapeHtml(amountText) : "未設定"}</p>
+    <p><strong>總收款金額：</strong>${amountText ? escapeHtml(amountText) : "未設定"}</p>
     <p><strong>安裝日期：</strong>${record.installDate ? formatDate(record.installDate) : "未設定"}</p>
     <p><strong>保固到期日：</strong>${record.warrantyDate ? formatDate(record.warrantyDate) : "未設定"}</p>
     <p><strong>備註：</strong>${displayValue(record.note)}</p>
@@ -2008,12 +2008,12 @@ function buildWarrantyInfo(record = {}) {
   return [
     "申悅保固資訊",
     field("車主姓名", record.owner),
-    field("聯繫電話", record.phone),
+    field("車主電話", record.phone),
     field("車牌號碼", record.plate),
-    field("車款年份", record.car),
-    field("安裝項目", record.items),
+    field("車款年分", record.car),
+    field("其他產品類別", record.items),
     field("主機規格", record.model || record.productSpec),
-    field("總金額", amountText),
+    field("總收款金額", amountText),
     field("安裝日期", record.installDate ? formatDate(record.installDate) : ""),
     field("保固到期日", record.warrantyDate ? formatDate(record.warrantyDate) : ""),
     field("備註", record.note)
