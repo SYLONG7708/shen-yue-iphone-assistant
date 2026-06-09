@@ -26,7 +26,7 @@ const updateUploadKey = "shenYueLastUpdateUpload";
 const localUpdateOverridesKey = "shenYueLocalUpdateOverrides";
 const adminPinHash = "7c5fab57f8c1447f91f98eb3fcea7954e4f704d92686c5fd2e551e34ca88f8a8";
 const fallbackAdminPin = String.fromCharCode(55, 55, 48, 56);
-const defaultCloudDeploymentId = "AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz";
+const defaultCloudDeploymentId = "AKfycbwrUCUeksZrWOUSDrdKgUGTS1JIPRX3c18PIKgZu_j64jBZGXjI7rnHTFjmIqUljZFzeg";
 const defaultCloudEndpoint = `https://script.google.com/macros/s/${defaultCloudDeploymentId}/exec`;
 const defaultContentConfigUrl = "shen-yue-assistant-content.json";
 const legacyUpdateManifestUrl = "https://sylong7708.github.io/shen-yue-iphone-assistant/updates.json";
@@ -43,6 +43,7 @@ const updateUploadFileTargets = {
 const currentLineId = "@585eeefp";
 const legacyLineIds = new Set(["7708LUNG", "@7708LUNG", "7708lung", "@7708lung"]);
 const legacyCloudEndpoints = new Set([
+  "https://script.google.com/macros/s/AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz/exec",
   "https://script.google.com/macros/s/AKfycbxxtXq2JnoqYHU7rHDo4Ddfe_ZfPzwDolglZsbBmY2j1YUkV1fbqcFv8KhNh-stPL8/exec"
 ]);
 const warrantyModelOptions = [
@@ -437,7 +438,7 @@ async function sendToCloud(payload) {
     throw new Error(result.message || "雲端回報上傳失敗。");
   }
   if (payload?.type === "update-center-app" && !result.item) {
-    throw new Error("Apps Script 仍是舊版或未部署更新中心功能，沒有回傳更新項目。請重新部署本專案 Code.gs。");
+    throw new Error("Apps Script 仍是舊版或未部署更新中心功能，沒有回傳更新項目。請在電腦執行 tools/deploy-apps-script.ps1 自動上傳並部署 Code.gs。");
   }
   return result;
 }
@@ -1223,7 +1224,7 @@ function assertInlineUploadSize(file, kind) {
   const limitLabel = formatFileSize(limit);
   const fileLabel = formatFileSize(file.size);
   if (kind === "apk") {
-    throw new Error(`APK 檔案 ${fileLabel} 太大，請先上傳到 GitHub Releases、Google Drive 或其他免費空間，再把直接下載網址貼到「應用下載地址」。本表格只直接上傳 ${limitLabel} 以下的小 APK。`);
+    throw new Error(`APK 檔案 ${fileLabel} 太大，請先上傳到 GitHub Releases、Google Drive 或其他免費空間，再把直接下載網址貼到「應用下載地址」。目前表格只讀取 APK 資訊，不會保存檔案。`);
   }
   throw new Error(`圖片檔案 ${fileLabel} 太大，請壓縮圖片或改貼圖片網址。本表格只直接上傳 ${limitLabel} 以下的圖片。`);
 }
@@ -1363,10 +1364,6 @@ function removePendingUploadDisplayValues(data = {}) {
 
 function buildCloudUpdateUploadData(data = {}, files = {}) {
   const cloudData = { ...data };
-  if (files.icon) cloudData.iconUrl = "";
-  if (files.firstImage) cloudData.firstImageUrl = "";
-  if (files.secondImage) cloudData.secondImageUrl = "";
-  if (files.apk && String(cloudData.apkUrl || "").startsWith("待上傳")) cloudData.apkUrl = "";
   return cloudData;
 }
 
@@ -1595,8 +1592,8 @@ async function saveAndUploadUpdateApp() {
 
   if (!await requestUpdateEditorAccess(isEditMode ? "儲存修改" : "儲存新增")) return;
 
-  if (!isEditMode && !mergedData.apkUrl && !apkFile) {
-    setUpdateUploadStatus("新增 App 才需要 APK 下載地址或小型 APK 檔案。若只是改 APK 名稱，請先點下方 App 項目，再按「修改資料」。", "error");
+  if (!isEditMode && !mergedData.apkUrl) {
+    setUpdateUploadStatus("新增 App 需要先填 APK 下載地址。右側 APK 檔案只會用來自動讀取名稱、版本與容量，不會由 Apps Script 保存檔案。", "error");
     return;
   }
 
@@ -1619,10 +1616,10 @@ async function saveAndUploadUpdateApp() {
     }
 
     const files = {
-      icon: await readUploadFile(updateUploadForm.elements.iconFile?.files?.[0], "image") || (parsedApk?.ok ? parsedApk.iconFile : null),
-      firstImage: await readUploadFile(updateUploadForm.elements.firstImageFile?.files?.[0], "image"),
-      secondImage: await readUploadFile(updateUploadForm.elements.secondImageFile?.files?.[0], "image"),
-      apk: mergedData.apkUrl ? null : await readUploadFile(apkFile, "apk")
+      icon: null,
+      firstImage: null,
+      secondImage: null,
+      apk: null
     };
 
     if (!mergedData.sizeLabel && files.apk?.sizeLabel) {
@@ -1645,10 +1642,10 @@ async function saveAndUploadUpdateApp() {
 
     const actionText = isEditMode ? "修改" : "新增";
     const apkText = mergedData.apkUrl
-      ? "已使用 APK 下載網址，沒有上傳右側 APK 檔案。"
+      ? "已使用 APK 下載網址；右側檔案只作為資訊解析，不會上傳到 Google Drive。"
       : isEditMode
-        ? "雲端會沿用同一筆 App 原本的 APK 下載網址；若有選新檔案也會送到 Google Drive。"
-        : "小型 APK 檔案已送到 Apps Script，會由 Google Drive 產生下載網址。";
+        ? "雲端會沿用同一筆 App 原本的 APK 下載網址。"
+        : "低權限 Apps Script 不保存 APK 檔案。";
     setUpdateUploadStatus(`已儲存${actionText}資料，雲端已回傳更新項目。${apkText} 正在重新讀取雲端清單。`, "success");
   } catch (error) {
     setUpdateUploadStatus(`儲存或上傳失敗：${error.message || error}`, "error");

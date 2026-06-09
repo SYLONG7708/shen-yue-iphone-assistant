@@ -2,8 +2,8 @@
 
 ## 本次版本
 
-- 版本：1.0.8
-- 重點：更新中心補上 APK 自動偵測；只要選 APK、第一張圖片、第二張圖片，其餘 App 資訊會自動帶入。
+- 版本：1.0.10-live 工具更新
+- 重點：更新中心保留 APK 自動偵測，並改用低權限 Apps Script JSON 儲存，避免 Google 封鎖敏感授權。
 - 支援：套件名維持 `tw.com.shenyue.assistant`，可覆蓋更新原本雲端版或 APK 版 App。
 
 ## 更新中心上傳
@@ -11,9 +11,10 @@
 - 更新中心頁面新增繁體中文表格式上傳表單。
 - 新增 App 時選 APK、第一張圖片、第二張圖片即可；應用圖標、應用名稱、類別、介紹、App 容量、套件名稱、版本名稱、版本碼、最低 Android、目標 SDK 與 SHA-256 會自動偵測。
 - 若 APK 無法在目前瀏覽器解析，仍保留手動填寫欄位作為備援。
-- 按「儲存並上傳」後會送到 Google Apps Script，寫入 `更新中心上傳` 工作表；有選擇圖片或小型 APK 時會保存到 Google Drive。
-- 更新清單可由 Apps Script `?type=updates` 輸出，並自動合併原本 GitHub `updates.json` 內容。
-- 大型 APK 建議使用 `tools/publish-update-app.ps1` 發布到 GitHub Releases，再把產生的 APK 下載網址寫入更新清單。
+- 按「儲存並上傳」後會送到 Google Apps Script，寫入低權限 JSON 儲存；圖片與 APK 請使用公開網址。
+- 更新清單可由 Apps Script `?type=updates` 輸出，目前已種入 9 筆本機 `updates.json` 內容。
+- `tools/deploy-apps-script.ps1` 可自動上傳 `Code.gs`、建立版本、重新部署既有 Apps Script `/exec` 網址。
+- 大型 APK 建議使用 `tools/publish-update-app.ps1` 發布到 GitHub Releases；加上 `-SyncAppsScript` 可把同一筆更新自動寫入 Apps Script 工作表。
 - 操作教學：`docs/update-center-upload-guide.html`。
 
 ## APK
@@ -51,4 +52,25 @@ powershell -ExecutionPolicy Bypass -File .\tools\publish-update-app.ps1 `
   -IconPath "C:\路徑\icon.png" `
   -FirstImagePath "C:\路徑\photo-1.png" `
   -SecondImagePath "C:\路徑\photo-2.png"
+```
+
+## Apps Script 自動部署
+
+目前已完成 Google 登入與低權限部署：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\deploy-apps-script.ps1 `
+  -ScriptId "1HUOf9VUijyDLDCRrpGNJySVp-xuFvq7MWqUBVju3jPjxS7VnDgqmJdE7" `
+  -DeploymentId "AKfycbwrUCUeksZrWOUSDrdKgUGTS1JIPRX3c18PIKgZu_j64jBZGXjI7rnHTFjmIqUljZFzeg"
+```
+
+之後正式發布 APK 並同步 Apps Script：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\publish-update-app.ps1 `
+  -ApkPath "C:\路徑\app.apk" `
+  -Name "App 顯示名稱" `
+  -AppsScriptId "1HUOf9VUijyDLDCRrpGNJySVp-xuFvq7MWqUBVju3jPjxS7VnDgqmJdE7" `
+  -DeployAppsScript `
+  -SyncAppsScript
 ```

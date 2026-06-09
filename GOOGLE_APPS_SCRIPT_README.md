@@ -1,41 +1,65 @@
-# Google Apps Script 上傳設定
+# Google Apps Script 自動上傳與部署設定
 
-1. 到 Google 試算表建立或開啟保固資料表。
-2. 點選「擴充功能」>「Apps Script」。
-3. 把 `Code.gs` 內容貼到 Apps Script。
-4. 若 Apps Script 不是從試算表內建立，請把試算表 ID 填入 `SPREADSHEET_ID`。
-5. 部署成「網頁應用程式」：
-   - 執行身分：我
-   - 誰可以存取：任何人
-6. 複製 `/exec` 結尾的網址，貼到網頁管理頁的「Google Apps Script 雲端網址」。
+本專案已改成可用 `tools/deploy-apps-script.ps1` 自動上傳 `Code.gs` 並更新既有 Apps Script 網頁應用程式部署，不必每次到 Apps Script 後台手動貼上程式碼。
 
 目前申悅助手網站固定使用的 Apps Script 部署網址：
 
 ```text
-https://script.google.com/macros/s/AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz/exec
+https://script.google.com/macros/s/AKfycbwrUCUeksZrWOUSDrdKgUGTS1JIPRX3c18PIKgZu_j64jBZGXjI7rnHTFjmIqUljZFzeg/exec
 ```
 
-若 Google 試算表欄位沒有即時變成新版，代表 Apps Script 線上部署仍是舊版；請把本專案 `Code.gs` 完整貼到 Apps Script，按「部署」>「管理部署作業」>「編輯」>「版本」選「新增版本」後重新部署。
+## 目前可用設定
 
-工作表會自動建立：
+- Google 帳號：`pppp77088@gmail.com`
+- Apps Script 指令碼 ID：`1HUOf9VUijyDLDCRrpGNJySVp-xuFvq7MWqUBVju3jPjxS7VnDgqmJdE7`
+- 部署 ID：`AKfycbwrUCUeksZrWOUSDrdKgUGTS1JIPRX3c18PIKgZu_j64jBZGXjI7rnHTFjmIqUljZFzeg`
+- 儲存方式：低權限 `PropertiesService` JSON，不使用 Google Drive / Sheets 敏感授權。
 
-- `保固上傳`：保存保固登錄資料，欄位採橫向顯示，並自動加大欄寬、列高與換行，避免內容被遮住。
-- `更新中心上傳`：保存 APK、圖標、圖片、分類、介紹與更新清單 JSON。
+重新部署：
 
-若更新中心表格有選擇圖片或 APK 檔案，Apps Script 會自動建立 Google Drive 資料夾 `申悅更新中心上傳` 並保存檔案。更新中心前端會讀取同一個 Apps Script 的 `?type=updates`，例如：
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\deploy-apps-script.ps1 `
+  -ScriptId "1HUOf9VUijyDLDCRrpGNJySVp-xuFvq7MWqUBVju3jPjxS7VnDgqmJdE7" `
+  -DeploymentId "AKfycbwrUCUeksZrWOUSDrdKgUGTS1JIPRX3c18PIKgZu_j64jBZGXjI7rnHTFjmIqUljZFzeg"
+```
+
+若 Google 封鎖 `clasp login --use-project-scopes`，不要再要求敏感 scopes；目前低權限版不需要該授權。
+
+工具會自動：
+
+- 上傳 `Code.gs` 與 `appsscript.json`。
+- 建立新的 Apps Script 版本。
+- 重新部署既有 `/exec` 網頁應用程式網址。
+- 讀取 `?type=updates` 驗證更新清單有回傳 `apps`。
+
+目前驗證通過：
+
+```powershell
+node -e "fetch('https://script.google.com/macros/s/AKfycbwrUCUeksZrWOUSDrdKgUGTS1JIPRX3c18PIKgZu_j64jBZGXjI7rnHTFjmIqUljZFzeg/exec?type=updates',{redirect:'follow'}).then(async r=>console.log(await r.text()))"
+```
+
+更新中心前端會讀取同一個 Apps Script 的 `?type=updates`，例如：
 
 ```text
-https://script.google.com/macros/s/你的部署ID/exec?type=updates
+https://script.google.com/macros/s/AKfycbwrUCUeksZrWOUSDrdKgUGTS1JIPRX3c18PIKgZu_j64jBZGXjI7rnHTFjmIqUljZFzeg/exec?type=updates
 ```
 
 若雲端清單暫時無法讀取，App 會退回內建 `updates.json`。
 
-## 大型 APK 建議
+## 大型 APK 自動發布
 
-Google Apps Script / Google Drive 表單上傳適合圖片與小型 APK。大型 APK 建議改用本機工具：
+低權限 Apps Script 不保存 APK 或圖片檔，只保存更新清單 JSON。大型 APK 建議改用本機工具，工具可同時發布 GitHub Release、更新 `updates.json`，並把同一筆資料同步寫入 Apps Script：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\publish-update-app.ps1 -ApkPath "C:\路徑\app.apk" -Name "App 名稱" -PackageName "com.example.app" -VersionCode 100 -VersionName "1.0.0"
+powershell -ExecutionPolicy Bypass -File .\tools\publish-update-app.ps1 `
+  -ApkPath "C:\路徑\app.apk" `
+  -Name "App 名稱" `
+  -PackageName "com.example.app" `
+  -VersionCode 100 `
+  -VersionName "1.0.0" `
+  -AppsScriptId "1HUOf9VUijyDLDCRrpGNJySVp-xuFvq7MWqUBVju3jPjxS7VnDgqmJdE7" `
+  -DeployAppsScript `
+  -SyncAppsScript
 ```
 
-工具會把 APK 上傳到 `SYLONG7708/update` 的 `apk-cloud` GitHub Release，並更新 `updates.json`。完整教學在 `docs/update-center-upload-guide.html`。
+若 `Code.gs` 已經是新版，可省略 `-DeployAppsScript`，只保留 `-SyncAppsScript`。完整教學在 `docs/update-center-upload-guide.html`。

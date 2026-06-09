@@ -11,20 +11,29 @@ param(
 
   [string]$VersionName = "",
 
-  [string]$Category = "其他應用",
-  [string]$Description = "此 APK 尚未填寫介紹。",
+  [string]$Category = "Other apps",
+  [string]$Description = "No description.",
   [string]$IconPath = "",
   [string]$FirstImagePath = "",
   [string]$SecondImagePath = "",
-  [string]$MinAndroid = "依 APK 設定",
+  [string]$MinAndroid = "By APK",
   [string]$TargetSdk = "",
   [string]$ReleaseTag = "apk-cloud",
   [string]$UpdateRepo = "SYLONG7708/update",
   [string]$AssistantPagesBase = "https://sylong7708.github.io/shen-yue-iphone-assistant",
-  [switch]$SkipUpdateRepoPush
+  [switch]$SkipUpdateRepoPush,
+  [string]$AppsScriptDeploymentId = "AKfycbwrUCUeksZrWOUSDrdKgUGTS1JIPRX3c18PIKgZu_j64jBZGXjI7rnHTFjmIqUljZFzeg",
+  [string]$AppsScriptEndpoint = "",
+  [string]$AppsScriptId = "",
+  [switch]$DeployAppsScript,
+  [switch]$SyncAppsScript
 )
 
 $ErrorActionPreference = "Stop"
+
+if (-not $AppsScriptEndpoint -and $AppsScriptDeploymentId) {
+  $AppsScriptEndpoint = "https://script.google.com/macros/s/$AppsScriptDeploymentId/exec"
+}
 
 function Resolve-RequiredFile([string]$Path, [string]$Label) {
   if (-not $Path) { return "" }
@@ -115,6 +124,73 @@ function Save-Manifest([string]$Path, [object]$Manifest, [object]$Item) {
   Set-Content -Encoding UTF8 -LiteralPath $Path -Value $json
 }
 
+function Invoke-AppsScriptDeploy([string]$ScriptId, [string]$DeploymentId) {
+  $deployScript = Join-Path $PSScriptRoot "deploy-apps-script.ps1"
+  if (-not (Test-Path -LiteralPath $deployScript)) {
+    throw "Apps Script deploy script not found: $deployScript"
+  }
+
+  $arguments = @(
+    "-DeploymentId", $DeploymentId,
+    "-Description", "auto-update-center"
+  )
+  if ($ScriptId) {
+    $arguments += @("-ScriptId", $ScriptId)
+  }
+
+  Write-Host "Deploying Apps Script Code.gs before cloud sync ..."
+  & $deployScript @arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "Apps Script deploy failed."
+  }
+}
+
+function Sync-AppsScriptUpdate([string]$Endpoint, [object]$Item) {
+  if (-not $Endpoint) {
+    throw "AppsScriptEndpoint is required when -SyncAppsScript is used."
+  }
+
+  $gallery = @()
+  if ($Item.galleryImages) { $gallery = @($Item.galleryImages) }
+
+  $payload = [ordered]@{
+    type = "update-center-app"
+    updateApp = [ordered]@{
+      manifestId = $Item.id
+      appName = $Item.name
+      name = $Item.name
+      category = $Item.category
+      description = $Item.description
+      iconUrl = $Item.iconUrl
+      firstImageUrl = if ($gallery.Count -ge 1) { $gallery[0] } else { $Item.imageUrl }
+      secondImageUrl = if ($gallery.Count -ge 2) { $gallery[1] } else { "" }
+      apkUrl = $Item.apkUrl
+      sizeLabel = $Item.sizeLabel
+      packageName = $Item.packageName
+      versionName = $Item.versionName
+      versionCode = $Item.versionCode
+      minAndroid = $Item.minAndroid
+      targetSdk = $Item.targetSdk
+      sha256 = $Item.sha256
+      note = "Synced by tools/publish-update-app.ps1"
+    }
+    files = @{}
+  }
+
+  $json = $payload | ConvertTo-Json -Depth 20
+  Write-Host "Syncing update item to Apps Script ..."
+  $response = Invoke-RestMethod -Method Post -Uri $Endpoint -Body $json -ContentType "text/plain;charset=utf-8" -TimeoutSec 60
+
+  if ($response.ok -eq $false) {
+    throw "Apps Script sync failed: $($response.message)"
+  }
+  if (-not $response.item) {
+    throw "Apps Script did not return an update item. Redeploy Code.gs with tools/deploy-apps-script.ps1."
+  }
+
+  Write-Host "Synced Apps Script row: $($response.row)"
+}
+
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $apk = Resolve-RequiredFile $ApkPath "APK"
 $icon = Resolve-RequiredFile $IconPath "Icon"
@@ -133,7 +209,7 @@ if ($VersionCode -le 0) {
   throw "VersionCode is required. Pass -VersionCode or install Android SDK aapt so it can be read from the APK."
 }
 if (-not $VersionName) {
-  $VersionName = "未標示"
+  $VersionName = "Unspecified"
 }
 
 $gh = (Get-Command gh -ErrorAction SilentlyContinue)
@@ -182,16 +258,16 @@ $item = [ordered]@{
   category = $Category
   description = $Description
   changelog = @(
-    "已加入申悅車機更新中心",
-    "可在車機內下載安裝",
-    "由 publish-update-app.ps1 發布"
+    "Added to Shen Yue update center",
+    "Available for in-car download and install",
+    "Published by publish-update-app.ps1"
   )
 }
 
 Write-Host "Uploading APK to GitHub Release $UpdateRepo/$ReleaseTag ..."
 & gh release view $ReleaseTag --repo $UpdateRepo *> $null
 if ($LASTEXITCODE -ne 0) {
-  & gh release create $ReleaseTag --repo $UpdateRepo --title "APK Cloud" --notes "申悅更新中心 APK 雲端檔案"
+  & gh release create $ReleaseTag --repo $UpdateRepo --title "APK Cloud" --notes "Shen Yue update center APK cloud files"
   if ($LASTEXITCODE -ne 0) { throw "Failed to create GitHub release $ReleaseTag." }
 }
 
@@ -225,6 +301,14 @@ if (-not $SkipUpdateRepoPush) {
   } finally {
     Pop-Location
   }
+}
+
+if ($DeployAppsScript) {
+  Invoke-AppsScriptDeploy -ScriptId $AppsScriptId -DeploymentId $AppsScriptDeploymentId
+}
+
+if ($SyncAppsScript) {
+  Sync-AppsScriptUpdate -Endpoint $AppsScriptEndpoint -Item ([pscustomobject]$item)
 }
 
 Write-Host "Done."

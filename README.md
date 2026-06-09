@@ -11,7 +11,7 @@ https://raw.githubusercontent.com/SYLONG7708/update/main/updates.json
 新版也支援 Google Apps Script 雲端清單：
 
 ```text
-https://script.google.com/macros/s/你的部署ID/exec?type=updates
+https://script.google.com/macros/s/AKfycbwrUCUeksZrWOUSDrdKgUGTS1JIPRX3c18PIKgZu_j64jBZGXjI7rnHTFjmIqUljZFzeg/exec?type=updates
 ```
 
 ## 重要檔案
@@ -26,7 +26,15 @@ https://script.google.com/macros/s/你的部署ID/exec?type=updates
 
 只要修改 `updates.json` 的 `name`、`description`、`iconUrl`、`imageUrl`、`apkUrl`、`sha256` 後重新上傳，車機端按「重新整理」即可看到變更，不必重新安裝更新中心 APK。
 
-也可以在更新中心頁面直接填寫「更新中心上傳表格」，選擇類別、填寫介紹、上傳圖標、兩張圖片與 APK，按「儲存並上傳雲端」後會送到 Google Apps Script，並寫入 `更新中心上傳` 工作表。
+也可以在更新中心頁面直接填寫「更新中心上傳表格」，選擇類別、填寫介紹、填入公開圖片與 APK 下載網址，按「儲存並上傳雲端」後會送到低權限 Google Apps Script JSON 儲存。
+
+Apps Script 不需要再手動貼上 `Code.gs`。目前已使用低權限部署，不需要額外敏感授權：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\deploy-apps-script.ps1 -ScriptId "1HUOf9VUijyDLDCRrpGNJySVp-xuFvq7MWqUBVju3jPjxS7VnDgqmJdE7" -DeploymentId "AKfycbwrUCUeksZrWOUSDrdKgUGTS1JIPRX3c18PIKgZu_j64jBZGXjI7rnHTFjmIqUljZFzeg"
+```
+
+正式 APK 發布時，可用 `tools/publish-update-app.ps1 -SyncAppsScript` 自動把同一筆更新寫入 Apps Script；若同時加上 `-DeployAppsScript`，會先自動部署新版 `Code.gs`。
 
 ## 大檔提醒
 
