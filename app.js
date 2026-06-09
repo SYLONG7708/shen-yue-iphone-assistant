@@ -28,6 +28,8 @@ const adminPinHash = "7c5fab57f8c1447f91f98eb3fcea7954e4f704d92686c5fd2e551e34ca
 const fallbackAdminPin = String.fromCharCode(55, 55, 48, 56);
 const defaultCloudDeploymentId = "AKfycbwrUCUeksZrWOUSDrdKgUGTS1JIPRX3c18PIKgZu_j64jBZGXjI7rnHTFjmIqUljZFzeg";
 const defaultCloudEndpoint = `https://script.google.com/macros/s/${defaultCloudDeploymentId}/exec`;
+const defaultWarrantyDeploymentId = "AKfycbwlvaUogloZ92oqn_itLds13EizVYD05BBduB1eDWxEIGsq5yu7vvWUSCgfCMAF9ydL";
+const defaultWarrantyEndpoint = `https://script.google.com/macros/s/${defaultWarrantyDeploymentId}/exec`;
 const defaultContentConfigUrl = "shen-yue-assistant-content.json";
 const legacyUpdateManifestUrl = "https://sylong7708.github.io/shen-yue-iphone-assistant/updates.json";
 const fallbackUpdateManifestUrl = "https://raw.githubusercontent.com/SYLONG7708/update/main/updates.json";
@@ -52,6 +54,11 @@ const legacyCloudDeploymentIds = new Set([
 const legacyCloudEndpoints = new Set([
   "https://script.google.com/macros/s/AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz/exec",
   "https://script.google.com/macros/s/AKfycbxxtXq2JnoqYHU7rHDo4Ddfe_ZfPzwDolglZsbBmY2j1YUkV1fbqcFv8KhNh-stPL8/exec"
+]);
+const warrantyCloudDeploymentIds = new Set([
+  defaultWarrantyDeploymentId,
+  "AKfycbz3z5n_rNoBqCv_YtqiGRXlCVPmQWDiqZsrTLs_nquZpjPu5MJWKtXlMz5bDTJlPmLV",
+  "AKfycbyhMg4hQ2gsCQMw_WT1lmuW9uihqrBBk1PmaUBqimya0CNVcJxTW6OLeLyjjbtj40Y-"
 ]);
 const warrantyModelOptions = [
   "SY-C4 四核 2g+32g",
@@ -155,18 +162,40 @@ function isLegacyCloudEndpoint(value) {
   return [...legacyCloudDeploymentIds].some((deploymentId) => text.includes(deploymentId));
 }
 
-function normalizeCloudEndpoint(value) {
+function isWarrantyCloudEndpoint(value) {
   const text = String(value || "").trim();
-  if (!text || isLegacyCloudEndpoint(text)) return defaultCloudEndpoint;
-  if (text.includes(defaultCloudDeploymentId)) return defaultCloudEndpoint;
+  if (!text) return false;
+  return [...warrantyCloudDeploymentIds].some((deploymentId) => text.includes(deploymentId));
+}
+
+function normalizeAppsScriptEndpoint(value, fallbackEndpoint, fallbackDeploymentIds = new Set()) {
+  const text = String(value || "").trim();
+  if (!text || isLegacyCloudEndpoint(text)) return fallbackEndpoint;
+  if ([...fallbackDeploymentIds].some((deploymentId) => text.includes(deploymentId))) return fallbackEndpoint;
   try {
     const url = new URL(text, location.href);
     if (url.protocol === "https:" && url.hostname === "script.google.com" && url.pathname.includes("/macros/s/")) {
       const normalized = `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
-      return isLegacyCloudEndpoint(normalized) ? defaultCloudEndpoint : normalized;
+      return isLegacyCloudEndpoint(normalized) ? fallbackEndpoint : normalized;
     }
   } catch {
     return text;
+  }
+  return text;
+}
+
+function normalizeCloudEndpoint(value) {
+  return normalizeAppsScriptEndpoint(value, defaultCloudEndpoint, new Set([defaultCloudDeploymentId]));
+}
+
+function normalizeWarrantyEndpoint(value) {
+  return normalizeAppsScriptEndpoint(value, defaultWarrantyEndpoint, warrantyCloudDeploymentIds);
+}
+
+function normalizeContentConfigUrl(value) {
+  const text = String(value || "").trim();
+  if (!text || text.includes("shen-yue.com.tw") || text.includes("script.google.com/macros/")) {
+    return defaultContentConfigUrl;
   }
   return text;
 }
@@ -192,17 +221,29 @@ function migrateLegacyData() {
   try {
     const savedAdmin = JSON.parse(localStorage.getItem(adminKey) || "{}");
     if (Object.keys(savedAdmin).length) {
+      const savedCloudEndpoint = String(savedAdmin.cloudEndpoint || "");
       const nextAdmin = {
         ...savedAdmin,
         cloudEndpoint: normalizeCloudEndpoint(savedAdmin.cloudEndpoint),
+        warrantyEndpoint: normalizeWarrantyEndpoint(savedAdmin.warrantyEndpoint),
+        contentConfigUrl: normalizeContentConfigUrl(savedAdmin.contentConfigUrl),
         lineId: normalizeLineId(savedAdmin.lineId)
       };
+      if (!savedAdmin.warrantyEndpoint && [...warrantyCloudDeploymentIds].some((deploymentId) => savedCloudEndpoint.includes(deploymentId))) {
+        nextAdmin.warrantyEndpoint = normalizeWarrantyEndpoint(savedCloudEndpoint);
+        nextAdmin.cloudEndpoint = defaultCloudEndpoint;
+      }
       if (JSON.stringify(nextAdmin) !== JSON.stringify(savedAdmin)) {
         localStorage.setItem(adminKey, JSON.stringify(nextAdmin));
       }
     }
   } catch {
     localStorage.removeItem(adminKey);
+  }
+
+  const savedUpdateUrl = localStorage.getItem(updateUrlKey);
+  if (isWarrantyCloudEndpoint(savedUpdateUrl)) {
+    localStorage.setItem(updateUrlKey, getCloudUpdateManifestUrl());
   }
 
   try {
@@ -224,6 +265,7 @@ function getAdminSettings() {
   const saved = JSON.parse(localStorage.getItem(adminKey) || "{}");
   const settings = {
     cloudEndpoint: defaultCloudEndpoint,
+    warrantyEndpoint: defaultWarrantyEndpoint,
     contentConfigUrl: defaultContentConfigUrl,
     heroTitle: defaultContent.heroTitle,
     shopPhone: "0970-117-708",
@@ -232,9 +274,8 @@ function getAdminSettings() {
   };
   settings.lineId = normalizeLineId(settings.lineId);
   settings.cloudEndpoint = normalizeCloudEndpoint(settings.cloudEndpoint);
-  if (!settings.contentConfigUrl || String(settings.contentConfigUrl).includes("shen-yue.com.tw")) {
-    settings.contentConfigUrl = defaultContentConfigUrl;
-  }
+  settings.warrantyEndpoint = normalizeWarrantyEndpoint(settings.warrantyEndpoint);
+  settings.contentConfigUrl = normalizeContentConfigUrl(settings.contentConfigUrl);
   return settings;
 }
 
@@ -372,6 +413,7 @@ function getPreferredUpdateManifestUrl() {
   if (
     savedUrl &&
     !isLegacyCloudEndpoint(savedUrl) &&
+    !isWarrantyCloudEndpoint(savedUrl) &&
     savedUrl !== legacyUpdateManifestUrl &&
     savedUrl !== fallbackUpdateManifestUrl &&
     !savedUrl.includes("shen-yue-iphone-assistant")
@@ -466,10 +508,11 @@ function getPayload(type, data = {}) {
 }
 
 async function sendToCloud(payload) {
-  const { cloudEndpoint } = getAdminSettings();
-  if (!cloudEndpoint) throw new Error("尚未設定 Google Apps Script 雲端網址");
+  const { cloudEndpoint, warrantyEndpoint } = getAdminSettings();
+  const endpoint = payload?.type === "iphone-warranty" ? warrantyEndpoint : cloudEndpoint;
+  if (!endpoint) throw new Error("尚未設定 Google Apps Script 雲端網址");
 
-  const response = await fetch(cloudEndpoint, {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify(payload)
@@ -2886,6 +2929,7 @@ document.querySelector("[data-admin-login]").addEventListener("click", async () 
   const settings = getAdminSettings();
   const form = document.querySelector("[data-admin-form]");
   form.elements.cloudEndpoint.value = settings.cloudEndpoint || "";
+  form.elements.warrantyEndpoint.value = settings.warrantyEndpoint || "";
   form.elements.contentConfigUrl.value = settings.contentConfigUrl || "";
   form.elements.heroTitle.value = settings.heroTitle || defaultContent.heroTitle;
   form.elements.shopPhone.value = settings.shopPhone || "0970-117-708";
@@ -2897,6 +2941,8 @@ document.querySelector("[data-admin-form]").addEventListener("submit", (event) =
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget).entries());
   data.cloudEndpoint = normalizeCloudEndpoint(data.cloudEndpoint);
+  data.warrantyEndpoint = normalizeWarrantyEndpoint(data.warrantyEndpoint);
+  data.contentConfigUrl = normalizeContentConfigUrl(data.contentConfigUrl);
   data.lineId = normalizeLineId(data.lineId);
   localStorage.setItem(adminKey, JSON.stringify(data));
   applyContent({ heroTitle: data.heroTitle });
@@ -2917,6 +2963,26 @@ document.querySelector("[data-test-cloud]").addEventListener("click", async () =
     adminOutput.textContent = "測試資料已送出。請到 Google 試算表確認。";
   } catch (error) {
     adminOutput.textContent = `測試失敗：${error.message}`;
+  }
+});
+
+document.querySelector("[data-test-warranty-cloud]")?.addEventListener("click", async () => {
+  try {
+    const result = await sendToCloud(getPayload("iphone-warranty", {
+      owner: "雲端測試",
+      phone: "0000",
+      plate: "TEST",
+      car: "Apps Script",
+      items: "保固寫入測試",
+      model: "SY-B8 八核 2g+64g",
+      installDate: new Date().toISOString().slice(0, 10),
+      warrantyDate: new Date().toISOString().slice(0, 10),
+      totalAmount: "0",
+      note: "管理設定測試保固寫入，可確認後刪除"
+    }));
+    adminOutput.textContent = `保固測試已寫入 Google 試算表第 ${result.row} 列。`;
+  } catch (error) {
+    adminOutput.textContent = `保固測試失敗：${error.message}`;
   }
 });
 

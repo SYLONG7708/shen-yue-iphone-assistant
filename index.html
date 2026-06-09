@@ -262,8 +262,9 @@
       </div>
       <div class="admin-panel" data-admin-panel hidden>
         <form class="admin-form" data-admin-form>
-          <label>Google Apps Script 雲端網址<input name="cloudEndpoint" type="url"></label>
-          <label>遠端內容設定 JSON 網址<input name="contentConfigUrl" type="url" placeholder="https://shen-yue.com.tw/shen-yue-assistant-content.json"></label>
+          <label>更新中心 Apps Script 網址<input name="cloudEndpoint" type="url"></label>
+          <label>保固 Apps Script 網址<input name="warrantyEndpoint" type="url"></label>
+          <label>遠端內容設定 JSON 網址<input name="contentConfigUrl" type="text" placeholder="shen-yue-assistant-content.json"></label>
           <label>首頁標題<input name="heroTitle" type="text" placeholder="車機教學、保固資料、售後聯絡。"></label>
           <label>店家電話<input name="shopPhone" type="text" value="0970-117-708"></label>
           <label>LINE ID<input name="lineId" type="text" value="@585eeefp"></label>
@@ -272,6 +273,8 @@
         <div class="admin-tools">
           <button class="secondary-button" type="button" data-load-content>讀取遠端內容</button>
           <button class="secondary-button" type="button" data-test-cloud>測試雲端連線</button>
+          <button class="secondary-button" type="button" data-test-warranty-cloud>測試保固寫入</button>
+          <a class="secondary-button" href="docs/warranty-apps-script-deploy-guide.html" target="_blank" rel="noopener">保固部署教學</a>
           <button class="secondary-button" type="button" data-export-data>匯出本機資料</button>
         </div>
         <pre class="admin-output" data-admin-output>管理模式尚未開啟。</pre>
