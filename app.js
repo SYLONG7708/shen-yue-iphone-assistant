@@ -489,6 +489,9 @@ async function sendToCloud(payload) {
   if (payload?.type === "update-center-app" && !result.item) {
     throw new Error("Apps Script 仍是舊版或未部署更新中心功能，沒有回傳更新項目。請在電腦執行 tools/deploy-apps-script.ps1 自動上傳並部署 Code.gs。");
   }
+  if (payload?.type === "iphone-warranty" && !result.row) {
+    throw new Error("Apps Script 尚未部署保固寫入試算表功能，沒有回傳 Google Sheet 列號。請重新部署 Code.gs。");
+  }
   return result;
 }
 
@@ -2682,8 +2685,8 @@ async function saveAndUploadWarranty() {
   renderRecord();
   cloudStatus.textContent = "正在上傳保固資料到 Apps Script...";
   try {
-    await sendToCloud(getPayload("iphone-warranty", data));
-    cloudStatus.textContent = "保固資料已儲存並上傳到申悅 Apps Script。";
+    const result = await sendToCloud(getPayload("iphone-warranty", data));
+    cloudStatus.textContent = `保固資料已寫入 Google 試算表第 ${result.row} 列。`;
   } catch (error) {
     cloudStatus.textContent = `上傳失敗：${error.message}`;
   }

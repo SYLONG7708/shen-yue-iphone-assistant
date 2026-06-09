@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v221-update-delete";
+const cacheName = "shen-yue-assistant-v222-warranty-sheets";
 const assets = [
   "./",
   "./index.html",

@@ -27,7 +27,7 @@ function doPost(e) {
     }
     return jsonOutput({
       ok: true,
-      message: "低權限模式未寫入保固試算表；請使用更新中心上傳或 GitHub 發布工具。"
+      message: "低權限更新中心 API 已啟用；保固資料請使用保固專用 Apps Script endpoint。"
     });
   } catch (error) {
     return jsonOutput({
