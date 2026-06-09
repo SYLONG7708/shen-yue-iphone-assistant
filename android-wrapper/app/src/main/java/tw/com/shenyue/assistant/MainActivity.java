@@ -47,7 +47,7 @@ public class MainActivity extends Activity {
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/1.0.9");
+        settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/" + BuildConfig.VERSION_NAME);
 
         if (BuildConfig.HOME_URL.startsWith("https://")) {
             configureLiveCloudLoading(settings);
