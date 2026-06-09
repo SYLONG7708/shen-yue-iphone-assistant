@@ -1586,6 +1586,23 @@ function saveLocalUpdateOverride(item) {
   }
 }
 
+function removeLocalUpdateOverride(item) {
+  if (!item) return;
+  const key = getUpdateItemKey(item);
+  const nextItems = getLocalUpdateOverrides()
+    .map((existing) => getStorageSafeUpdateItem(existing))
+    .filter((existing) => getUpdateItemKey(existing) !== key);
+  if (!nextItems.length) {
+    localStorage.removeItem(localUpdateOverridesKey);
+    return;
+  }
+  try {
+    localStorage.setItem(localUpdateOverridesKey, JSON.stringify(nextItems));
+  } catch {
+    localStorage.removeItem(localUpdateOverridesKey);
+  }
+}
+
 function mergeExistingUploadData(data = {}, existingItem = null) {
   if (!existingItem) return { ...data };
   const galleryImages = Array.isArray(existingItem.galleryImages) ? existingItem.galleryImages : [];
@@ -1619,6 +1636,50 @@ function renderUploadedUpdatePreview(item) {
   renderUpdateItems(nextItems);
   if (updateStatus) {
     updateStatus.textContent = "本機修改已套用到目前畫面；重新整理後仍會優先顯示本機修改版。";
+  }
+}
+
+async function deleteUpdateItem(index) {
+  const item = currentUpdateItems[index];
+  if (!item) throw new Error("找不到要移除的更新項目。");
+
+  const itemName = item.name || item.id || item.packageName || "未命名 APK";
+  if (!await requestUpdateEditorAccess("移除更新項目")) return;
+  if (!window.confirm(`確定要從更新中心移除「${itemName}」？`)) return;
+
+  const deleteButton = document.querySelector(`[data-update-delete="${index}"]`);
+  if (deleteButton) deleteButton.disabled = true;
+  if (updateStatus) updateStatus.textContent = `正在移除「${itemName}」...`;
+
+  try {
+    const result = await sendToCloud(getPayload("delete-update-app", {
+      target: {
+        manifestId: item.id || "",
+        packageName: item.packageName || "",
+        appName: item.name || "",
+        name: item.name || "",
+        apkUrl: item.apkUrl || ""
+      }
+    }));
+    if (!result?.deleted) {
+      throw new Error(result?.message || "雲端未回傳刪除完成。");
+    }
+
+    removeLocalUpdateOverride(item);
+    const key = getUpdateItemKey(item);
+    const nextItems = currentUpdateItems.filter((existing) => getUpdateItemKey(existing) !== key);
+    if (updateDetail) {
+      updateDetail.hidden = true;
+      updateDetail.innerHTML = "";
+    }
+    renderUpdateItems(nextItems);
+    if (updateStatus) updateStatus.textContent = `已移除「${itemName}」，正在重新讀取雲端清單。`;
+    window.setTimeout(() => loadUpdateManifest(true), 700);
+  } catch (error) {
+    if (updateStatus) updateStatus.textContent = `移除失敗：${error.message || error}`;
+    throw error;
+  } finally {
+    if (deleteButton) deleteButton.disabled = false;
   }
 }
 
@@ -2471,6 +2532,7 @@ function renderUpdateDetailPage(index) {
         <button class="secondary-button" type="button" data-update-back>返回圖標清單</button>
         <button class="secondary-button" type="button" data-update-new>新增應用</button>
         <button class="secondary-button" type="button" data-update-edit="${index}">修改資料</button>
+        <button class="secondary-button danger-button" type="button" data-update-delete="${index}">移除應用</button>
       </div>
       <span class="status-pill ${state.pillClass}">${state.pill}</span>
     </div>
@@ -2683,6 +2745,16 @@ document.addEventListener("click", async (event) => {
   if (updateEdit) {
     if (!await requestUpdateEditorAccess("修改更新項目")) return;
     editUpdateUploadItem(Number(updateEdit.dataset.updateEdit));
+    return;
+  }
+
+  const updateDelete = event.target.closest("[data-update-delete]");
+  if (updateDelete) {
+    const index = Number(updateDelete.dataset.updateDelete);
+    deleteUpdateItem(index).catch((error) => {
+      updateDelete.disabled = false;
+      if (updateStatus) updateStatus.textContent = `移除失敗：${error.message || error}`;
+    });
     return;
   }
 

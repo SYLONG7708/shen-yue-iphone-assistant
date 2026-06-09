@@ -1339,6 +1339,11 @@ body.video-modal-open {
   min-height: 46px;
 }
 
+.update-detail-top .danger-button {
+  background: linear-gradient(135deg, rgba(232, 62, 82, 0.95), rgba(132, 18, 36, 0.96));
+  border-color: rgba(255, 126, 141, 0.48);
+}
+
 .update-card {
   display: grid;
   gap: 14px;

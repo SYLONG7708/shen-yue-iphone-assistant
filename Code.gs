@@ -22,6 +22,9 @@ function doPost(e) {
     if (payload.type === "update-center-app") {
       return jsonOutput(saveUpdateApp(payload));
     }
+    if (payload.type === "delete-update-app") {
+      return jsonOutput(deleteUpdateApp(payload));
+    }
     return jsonOutput({
       ok: true,
       message: "低權限模式未寫入保固試算表；請使用更新中心上傳或 GitHub 發布工具。"
@@ -84,6 +87,33 @@ function saveUpdateApp(payload) {
     row: manifest.apps.length,
     item,
     data: item
+  };
+}
+
+function deleteUpdateApp(payload) {
+  const target = payload.target || payload.updateApp || payload;
+  const manifest = getStoredManifest();
+  const existingItem = findExistingItem(manifest.apps, target);
+
+  if (!existingItem) {
+    throw new Error("找不到要刪除的更新項目。");
+  }
+
+  const deleteKey = normalizeItemId(existingItem.packageName || existingItem.id || existingItem.name || existingItem.apkUrl);
+  manifest.apps = manifest.apps.filter((item) => {
+    const key = normalizeItemId(item.packageName || item.id || item.name || item.apkUrl);
+    return key !== deleteKey;
+  });
+  manifest.updatedAt = formatManifestTime(new Date());
+  setStoredManifest(manifest);
+
+  return {
+    ok: true,
+    message: "更新項目已移除",
+    deleted: true,
+    item: existingItem,
+    apps: manifest.apps.length,
+    manifest
   };
 }
 
