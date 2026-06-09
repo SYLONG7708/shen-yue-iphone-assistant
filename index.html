@@ -162,7 +162,7 @@
             <p>Local Edit</p>
             <h3 id="update-upload-title">更新中心新增 / 修改</h3>
           </div>
-          <span>儲存後會送到低權限 Google Apps Script；請先填公開 APK 下載地址，圖片請填公開網址，正式 APK 建議使用 GitHub Releases。</span>
+          <span>儲存後會送到低權限 Google Apps Script；APK 請先放 GitHub Releases，再填直接下載網址或檔名。</span>
         </div>
         <form class="update-upload-form" data-update-upload-form>
           <input type="hidden" name="manifestId" data-update-edit-id>
@@ -205,10 +205,10 @@
 
           <label for="update-upload-apk">應用下載地址</label>
           <div class="update-upload-field">
-            <input id="update-upload-apk" name="apkUrl" type="text" placeholder="貼 APK 直接下載地址；大檔請先放免費空間">
-            <label class="upload-button">小 APK 上傳<input name="apkFile" type="file" accept=".apk,application/vnd.android.package-archive"></label>
+            <input id="update-upload-apk" name="apkUrl" type="text" placeholder="可貼完整下載網址，或填 default.apk 自動補 GitHub Release 連結">
+            <label class="upload-button">選 APK 讀取資訊<input name="apkFile" type="file" accept=".apk,application/vnd.android.package-archive"></label>
           </div>
-          <p class="update-upload-hint">新增 App 時只要選 APK、第一張圖片與第二張圖片；圖標、名稱、容量、套件、版本、SDK 與 SHA-256 會自動讀取。</p>
+          <p class="update-upload-hint">新增 App 時先把 APK 上傳到 GitHub Releases；若檔名相同，選 APK 後系統會自動使用該 Release 下載網址。圖標、名稱、容量、套件、版本、SDK 與 SHA-256 會自動讀取。</p>
 
           <label for="update-upload-size">App 容量</label>
           <input id="update-upload-size" name="sizeLabel" type="text" placeholder="選 APK 後自動讀取容量">

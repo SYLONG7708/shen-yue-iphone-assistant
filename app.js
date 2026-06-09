@@ -32,6 +32,8 @@ const defaultContentConfigUrl = "shen-yue-assistant-content.json";
 const legacyUpdateManifestUrl = "https://sylong7708.github.io/shen-yue-iphone-assistant/updates.json";
 const fallbackUpdateManifestUrl = "https://raw.githubusercontent.com/SYLONG7708/update/main/updates.json";
 const defaultUpdateManifestUrl = `${defaultCloudEndpoint}?type=updates`;
+const defaultApkReleaseTagUrl = "https://github.com/SYLONG7708/update/releases/tag/apk-cloud";
+const defaultApkReleaseDownloadBase = "https://github.com/SYLONG7708/update/releases/download/apk-cloud/";
 const maxInlineImageUploadBytes = 8 * 1024 * 1024;
 const maxInlineApkUploadBytes = 24 * 1024 * 1024;
 const updateUploadFileTargets = {
@@ -42,6 +44,11 @@ const updateUploadFileTargets = {
 };
 const currentLineId = "@585eeefp";
 const legacyLineIds = new Set(["7708LUNG", "@7708LUNG", "7708lung", "@7708lung"]);
+const legacyCloudDeploymentIds = new Set([
+  "AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz",
+  "AKfycbxxtXq2JnoqYHU7rHDo4Ddfe_ZfPzwDolglZsbBmY2j1YUkV1fbqcFv8KhNh-stPL8",
+  "AKfycbzV2bw_y88ix-g5k_X1afwRNi-8MvYVAnUDezevLe4oQvKrdnjnFp8iqeDFu5Fcqh7t6A"
+]);
 const legacyCloudEndpoints = new Set([
   "https://script.google.com/macros/s/AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz/exec",
   "https://script.google.com/macros/s/AKfycbxxtXq2JnoqYHU7rHDo4Ddfe_ZfPzwDolglZsbBmY2j1YUkV1fbqcFv8KhNh-stPL8/exec"
@@ -141,14 +148,22 @@ function normalizeLineId(value) {
   return text.startsWith("@") ? text : `@${text}`;
 }
 
+function isLegacyCloudEndpoint(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  if (legacyCloudEndpoints.has(text)) return true;
+  return [...legacyCloudDeploymentIds].some((deploymentId) => text.includes(deploymentId));
+}
+
 function normalizeCloudEndpoint(value) {
   const text = String(value || "").trim();
-  if (!text || legacyCloudEndpoints.has(text)) return defaultCloudEndpoint;
+  if (!text || isLegacyCloudEndpoint(text)) return defaultCloudEndpoint;
   if (text.includes(defaultCloudDeploymentId)) return defaultCloudEndpoint;
   try {
     const url = new URL(text, location.href);
     if (url.protocol === "https:" && url.hostname === "script.google.com" && url.pathname.includes("/macros/s/")) {
-      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+      const normalized = `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+      return isLegacyCloudEndpoint(normalized) ? defaultCloudEndpoint : normalized;
     }
   } catch {
     return text;
@@ -241,6 +256,39 @@ function displayValue(value) {
   return text ? escapeHtml(text) : "未設定";
 }
 
+function getGithubReleaseDownloadUrl(fileName) {
+  const cleanName = String(fileName || "").trim().split(/[\\/]/).filter(Boolean).pop() || "";
+  if (!cleanName) return "";
+  return `${defaultApkReleaseDownloadBase}${encodeURIComponent(cleanName)}`;
+}
+
+function looksLikeApkFilename(value) {
+  const text = String(value || "").trim();
+  if (!text || /^https?:\/\//i.test(text) || /^[a-z][a-z\d+.-]*:/i.test(text)) return false;
+  return /\.apk$/i.test(text);
+}
+
+function normalizeApkDownloadUrl(value, apkFile = null) {
+  const text = String(value || "").trim();
+  const fileName = apkFile?.name || "";
+  const pendingPrefix = "待上傳小 APK：";
+
+  if (!text && fileName) return getGithubReleaseDownloadUrl(fileName);
+  if (text.startsWith(pendingPrefix)) return getGithubReleaseDownloadUrl(text.slice(pendingPrefix.length) || fileName);
+  if (text === defaultApkReleaseTagUrl || text === `${defaultApkReleaseTagUrl}/`) {
+    return fileName ? getGithubReleaseDownloadUrl(fileName) : text;
+  }
+  if (looksLikeApkFilename(text)) return getGithubReleaseDownloadUrl(text);
+  return text;
+}
+
+function isDirectDownloadUrl(value) {
+  const text = String(value || "").trim();
+  if (!/^https?:\/\//i.test(text)) return false;
+  if (text === defaultApkReleaseTagUrl || text === `${defaultApkReleaseTagUrl}/`) return false;
+  return true;
+}
+
 function formatAmount(value) {
   const text = String(value ?? "").trim();
   if (!text) return "";
@@ -323,6 +371,7 @@ function getPreferredUpdateManifestUrl() {
   const savedUrl = localStorage.getItem(updateUrlKey);
   if (
     savedUrl &&
+    !isLegacyCloudEndpoint(savedUrl) &&
     savedUrl !== legacyUpdateManifestUrl &&
     savedUrl !== fallbackUpdateManifestUrl &&
     !savedUrl.includes("shen-yue-iphone-assistant")
@@ -1589,11 +1638,25 @@ async function saveAndUploadUpdateApp() {
   const isEditMode = Boolean(data.manifestId);
   const existingItem = getExistingUploadItem(data);
   const mergedData = mergeExistingUploadData(data, existingItem);
+  const normalizedApkUrl = normalizeApkDownloadUrl(mergedData.apkUrl, apkFile);
+  if (normalizedApkUrl !== mergedData.apkUrl) {
+    mergedData.apkUrl = normalizedApkUrl;
+    const apkUrlField = updateUploadForm.elements.apkUrl;
+    if (apkUrlField) {
+      clearPendingUploadField(apkUrlField, false);
+      apkUrlField.value = normalizedApkUrl;
+    }
+  }
 
   if (!await requestUpdateEditorAccess(isEditMode ? "儲存修改" : "儲存新增")) return;
 
   if (!isEditMode && !mergedData.apkUrl) {
-    setUpdateUploadStatus("新增 App 需要先填 APK 下載地址。右側 APK 檔案只會用來自動讀取名稱、版本與容量，不會由 Apps Script 保存檔案。", "error");
+    setUpdateUploadStatus(`新增 App 需要先有 APK 下載地址。請先把 APK 上傳到 ${defaultApkReleaseTagUrl}；若檔名相同，選 APK 後系統會自動使用 GitHub Releases 下載網址。`, "error");
+    return;
+  }
+
+  if (mergedData.apkUrl && !isDirectDownloadUrl(mergedData.apkUrl)) {
+    setUpdateUploadStatus(`應用下載地址必須是可直接下載的 http/https 網址。若你已把 default.apk 上傳到 GitHub Releases，請填 ${getGithubReleaseDownloadUrl("default.apk")}，或只填 default.apk 讓系統自動補成下載網址。`, "error");
     return;
   }
 

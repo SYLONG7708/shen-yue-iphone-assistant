@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v219-apk-auto-detect";
+const cacheName = "shen-yue-assistant-v220-release-url-fix";
 const assets = [
   "./",
   "./index.html",
