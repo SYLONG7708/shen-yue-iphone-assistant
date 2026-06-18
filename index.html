@@ -7,6 +7,7 @@
   <meta name="apple-mobile-web-app-title" content="申悅助手">
   <meta name="description" content="申悅車機助手，提供車載安卓機教學、保固紀錄、LINE聯絡、電話與導航到店。">
   <title>申悅助手</title>
+  <link rel="icon" href="assets/app-logo.png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="assets/app-logo.png">
   <link rel="stylesheet" href="styles.css">
@@ -36,14 +37,16 @@
           <button type="button" data-tab-target="warranty">保固紀錄</button>
           <button type="button" data-tab-target="updates">更新中心</button>
           <button type="button" data-tab-target="contact">聯絡申悅</button>
+          <button type="button" data-tab-target="replay">回放中心</button>
         </div>
       </div>
     </section>
 
     <nav class="tab-bar" aria-label="申悅助手分頁">
       <button type="button" class="active" data-tab-target="dashboard">首頁</button>
-      <button type="button" data-tab-target="updates">更新</button>
       <button type="button" data-tab-target="tutorials">教學</button>
+      <button type="button" data-tab-target="updates">更新</button>
+      <button type="button" data-tab-target="replay">回放中心</button>
       <button type="button" data-tab-target="warranty">保固</button>
       <button type="button" data-tab-target="services">服務</button>
       <button type="button" data-tab-target="contact">聯絡</button>
@@ -55,11 +58,22 @@
         <h2>申悅車機服務中控台</h2>
       </div>
       <div class="dashboard-grid">
+        <a href="#replay" data-tab-target="replay">回放中心</a>
         <a href="#updates" data-tab-target="updates">更新中心</a>
         <a href="https://www.youtube.com/@shenyue6916" target="_blank" rel="noopener">YouTube 頻道</a>
         <a href="https://www.facebook.com/cccc7708" target="_blank" rel="noopener">Facebook</a>
         <a href="https://maps.google.com" target="_blank" rel="noopener">Google Maps</a>
         <a href="https://www.shen-yue.com.tw/" target="_blank" rel="noopener">申悅官網</a>
+      </div>
+    </section>
+
+    <section class="tab-panel replay-panel" id="replay" data-tab-panel>
+      <div class="panel-head replay-head">
+        <p>Replay Center</p>
+        <h2>回放中心</h2>
+      </div>
+      <div class="replay-frame-wrap">
+        <iframe class="replay-frame" src="replay-center/index.html" title="回放中心" loading="lazy"></iframe>
       </div>
     </section>
 

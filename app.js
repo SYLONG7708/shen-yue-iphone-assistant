@@ -3029,8 +3029,11 @@ syncUpdateUploadFileLabels();
 if (updateUrlInput) {
   updateUrlInput.value = getPreferredUpdateManifestUrl();
 }
-if (location.hash === "#updates") {
-  switchTab("updates");
+if (location.hash) {
+  const tabId = location.hash.slice(1);
+  if (document.getElementById(tabId)?.matches("[data-tab-panel]")) {
+    switchTab(tabId);
+  }
 }
 checkRemoteContentNow();
 cloudStatus.textContent = "已設定申悅雲端網址，可上傳保固資料與更新中心資料。";

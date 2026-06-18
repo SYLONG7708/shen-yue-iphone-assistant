@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-store" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <link rel="icon" href="data:," />
+    <title>回放中心觀看頁</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+        background: #02050a;
+        color: #dff9ff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        min-height: 100svh;
+        margin: 0;
+        padding: 16px;
+        background:
+          linear-gradient(90deg, rgba(34, 242, 255, 0.08) 1px, transparent 1px),
+          linear-gradient(180deg, rgba(168, 85, 247, 0.08) 1px, transparent 1px),
+          linear-gradient(135deg, #02050a 0%, #071a24 48%, #03070d 100%);
+        background-size: 46px 46px, 46px 46px, auto;
+      }
+      main {
+        max-width: 940px;
+        margin: 0 auto;
+      }
+      header,
+      section {
+        border: 1px solid rgba(34, 242, 255, 0.32);
+        border-radius: 8px;
+        background: rgba(6, 17, 29, 0.94);
+        padding: 16px;
+        box-shadow: 0 0 24px rgba(34, 242, 255, 0.08);
+      }
+      header {
+        margin-bottom: 14px;
+      }
+      h1 {
+        margin: 0 0 6px;
+        color: #f8fdff;
+        font-size: 28px;
+        letter-spacing: 0;
+      }
+      p {
+        margin: 0;
+        color: #93c5fd;
+        line-height: 1.6;
+      }
+      video {
+        width: 100%;
+        max-height: 62svh;
+        margin-top: 14px;
+        border-radius: 8px;
+        background: #000;
+        border: 1px solid rgba(34, 242, 255, 0.28);
+      }
+      .meta,
+      .diagnostics {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+        padding: 12px;
+        border: 1px solid rgba(34, 242, 255, 0.24);
+        border-radius: 8px;
+        background: rgba(3, 7, 18, 0.72);
+      }
+      .meta-row {
+        display: grid;
+        grid-template-columns: 92px minmax(0, 1fr);
+        gap: 10px;
+        align-items: start;
+        color: #dff9ff;
+        font-size: 14px;
+      }
+      .meta-row span:first-child {
+        color: #7dd3fc;
+      }
+      .value {
+        overflow-wrap: anywhere;
+      }
+      .actions {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+      }
+      a,
+      button {
+        min-height: 50px;
+        border: 1px solid rgba(34, 242, 255, 0.28);
+        border-radius: 8px;
+        background: rgba(8, 23, 37, 0.92);
+        color: #e0f7ff;
+        text-decoration: none;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        font: inherit;
+        padding: 8px;
+      }
+      .primary {
+        border-color: rgba(168, 85, 247, 0.72);
+        background: linear-gradient(135deg, #22f2ff, #a855f7);
+        color: #001018;
+        font-weight: 800;
+      }
+      .notice {
+        margin-top: 14px;
+        border: 1px solid rgba(34, 242, 255, 0.36);
+        border-radius: 8px;
+        padding: 12px;
+        color: #dff9ff;
+        background: rgba(34, 242, 255, 0.08);
+        white-space: pre-line;
+      }
+      .error {
+        border-color: rgba(248, 113, 113, 0.64);
+        color: #fecaca;
+        background: rgba(127, 29, 29, 0.24);
+      }
+      .warn {
+        border-color: rgba(251, 191, 36, 0.64);
+        color: #fde68a;
+        background: rgba(120, 53, 15, 0.24);
+      }
+      .hidden {
+        display: none;
+      }
+      @media (max-width: 780px) {
+        body {
+          padding: 10px;
+        }
+        .actions {
+          grid-template-columns: 1fr;
+        }
+        .meta-row {
+          grid-template-columns: 78px minmax(0, 1fr);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>回放中心</h1>
+        <p id="subtitle">手機觀看與下載頁</p>
+      </header>
+      <section>
+        <p id="fileName">讀取影片中...</p>
+        <video id="player" controls playsinline webkit-playsinline preload="metadata" crossorigin="anonymous"></video>
+        <div class="meta" id="meta">
+          <div class="meta-row"><span>核對碼</span><strong class="value" id="uidText">-</strong></div>
+          <div class="meta-row"><span>檔案大小</span><strong class="value" id="sizeText">-</strong></div>
+          <div class="meta-row"><span>播放格式</span><strong class="value" id="formatText">-</strong></div>
+          <div class="meta-row"><span>播放狀態</span><strong class="value" id="stateText">-</strong></div>
+          <div class="meta-row"><span>影片來源</span><strong class="value" id="sourceText">-</strong></div>
+        </div>
+        <div class="actions">
+          <button type="button" id="download" class="primary">下載影片</button>
+          <a id="openDirect" href="#" target="_blank" rel="noopener">原始影片</a>
+          <button type="button" id="externalPlayer">外部播放器</button>
+          <button type="button" id="share">分享</button>
+          <button type="button" id="lineShare">LINE</button>
+          <button type="button" id="copy">複製連結</button>
+        </div>
+        <div id="diagnostics" class="diagnostics hidden"></div>
+        <div id="notice" class="notice hidden"></div>
+      </section>
+    </main>
+    <script>
+      const HLS_JS_URL = "https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js";
+      const MIME_BY_EXTENSION = {
+        mp4: "video/mp4",
+        m4v: "video/mp4",
+        mov: "video/quicktime",
+        webm: "video/webm",
+        ogv: "video/ogg",
+        ogg: "video/ogg",
+        m3u8: "application/vnd.apple.mpegurl",
+        m3u: "application/vnd.apple.mpegurl",
+        ts: "video/mp2t",
+        "3gp": "video/3gpp",
+        "3g2": "video/3gpp2",
+        mkv: "video/x-matroska",
+        avi: "video/x-msvideo",
+        flv: "video/x-flv"
+      };
+      const FORMAT_LABELS = {
+        mp4: "MP4",
+        m4v: "M4V",
+        mov: "MOV",
+        webm: "WebM",
+        ogv: "OGG Video",
+        ogg: "OGG Video",
+        m3u8: "HLS / M3U8",
+        m3u: "HLS / M3U8",
+        ts: "MPEG-TS",
+        "3gp": "3GP",
+        "3g2": "3G2",
+        mkv: "MKV",
+        avi: "AVI",
+        flv: "FLV"
+      };
+      const BROWSER_RISKY_EXTENSIONS = new Set(["mkv", "avi", "flv", "ts"]);
+      let hlsInstance = null;
+      let hlsScriptPromise = null;
+      let currentVideo = "";
+      let currentName = "replay-video.mp4";
+      let currentMime = "";
+      let currentExtension = "";
+      let loadToken = 0;
+      let diagnosticsTimer = 0;
+
+      function readHashParams() {
+        const raw = location.hash.startsWith("#") ? location.hash.slice(1) : location.hash;
+        return new URLSearchParams(raw);
+      }
+
+      function firstValue(...keys) {
+        const query = new URLSearchParams(location.search);
+        const hash = readHashParams();
+        for (const key of keys) {
+          const value = query.get(key);
+          if (value) return value;
+        }
+        for (const key of keys) {
+          const value = hash.get(key);
+          if (value) return value;
+        }
+        return "";
+      }
+
+      function formatBytes(value) {
+        const bytes = Number(value || 0);
+        if (!Number.isFinite(bytes) || bytes <= 0) return "-";
+        const units = ["B", "KB", "MB", "GB", "TB"];
+        const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+        const size = bytes / Math.pow(1024, index);
+        return `${size >= 10 || index === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[index]}`;
+      }
+
+      function extensionFrom(value) {
+        const direct = (value || "").trim().toLowerCase();
+        if (direct && /^[a-z0-9]+$/.test(direct)) return direct;
+        try {
+          const url = new URL(value);
+          const clean = url.pathname.split("/").pop() || "";
+          const index = clean.lastIndexOf(".");
+          return index >= 0 ? clean.slice(index + 1).toLowerCase() : "";
+        } catch {
+          const index = direct.lastIndexOf(".");
+          return index >= 0 ? direct.slice(index + 1).toLowerCase() : "";
+        }
+      }
+
+      function mimeFrom(extension, rawMime) {
+        const mime = (rawMime || "").trim().toLowerCase();
+        if (mime) return mime;
+        return MIME_BY_EXTENSION[extension] || "video/mp4";
+      }
+
+      function isHttpVideoUrl(value) {
+        try {
+          const url = new URL(value);
+          return url.protocol === "https:" || url.protocol === "http:";
+        } catch {
+          return false;
+        }
+      }
+
+      function isHls(extension, mime, video) {
+        return extension === "m3u8"
+          || extension === "m3u"
+          || mime.includes("mpegurl")
+          || mime.includes("m3u8")
+          || /\.m3u8($|\?)/i.test(video);
+      }
+
+      function shouldUseNativeHls() {
+        const ua = navigator.userAgent || "";
+        const isAppleWebKit = /Safari/i.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox/i.test(ua);
+        const isIOS = /iPhone|iPad|iPod/i.test(ua);
+        return (isAppleWebKit || isIOS) && Boolean(player.canPlayType("application/vnd.apple.mpegurl"));
+      }
+
+      const player = document.getElementById("player");
+      const download = document.getElementById("download");
+      const openDirect = document.getElementById("openDirect");
+      const externalPlayer = document.getElementById("externalPlayer");
+      const share = document.getElementById("share");
+      const lineShare = document.getElementById("lineShare");
+      const copy = document.getElementById("copy");
+      const fileName = document.getElementById("fileName");
+      const subtitle = document.getElementById("subtitle");
+      const notice = document.getElementById("notice");
+      const diagnostics = document.getElementById("diagnostics");
+      const uidText = document.getElementById("uidText");
+      const sizeText = document.getElementById("sizeText");
+      const formatText = document.getElementById("formatText");
+      const stateText = document.getElementById("stateText");
+      const sourceText = document.getElementById("sourceText");
+
+      function showNotice(message, tone = "info") {
+        notice.classList.remove("hidden", "error", "warn");
+        if (tone === "error") notice.classList.add("error");
+        if (tone === "warn") notice.classList.add("warn");
+        notice.textContent = message;
+      }
+
+      function hideNotice() {
+        notice.classList.add("hidden");
+        notice.classList.remove("error", "warn");
+        notice.textContent = "";
+      }
+
+      function setState(value) {
+        stateText.textContent = value;
+      }
+
+      function setControlsVisible(visible) {
+        player.classList.toggle("hidden", !visible);
+        download.classList.toggle("hidden", !visible);
+        openDirect.classList.toggle("hidden", !visible);
+        externalPlayer.classList.toggle("hidden", !visible);
+        share.classList.toggle("hidden", !visible);
+        lineShare.classList.toggle("hidden", !visible);
+        copy.classList.toggle("hidden", !visible);
+      }
+
+      function destroyHls() {
+        if (hlsInstance) {
+          hlsInstance.destroy();
+          hlsInstance = null;
+        }
+      }
+
+      function loadHlsScript() {
+        if (window.Hls) return Promise.resolve();
+        if (hlsScriptPromise) return hlsScriptPromise;
+        hlsScriptPromise = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = HLS_JS_URL;
+          script.async = true;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error("HLS.js 載入失敗"));
+          document.head.appendChild(script);
+        });
+        return hlsScriptPromise;
+      }
+
+      function resetPlayer() {
+        clearTimeout(diagnosticsTimer);
+        destroyHls();
+        player.pause();
+        player.removeAttribute("src");
+        while (player.firstChild) player.removeChild(player.firstChild);
+        player.load();
+      }
+
+      async function forceLoadVideo(video, mime, extension) {
+        const token = ++loadToken;
+        resetPlayer();
+        setState("載入中");
+
+        if (BROWSER_RISKY_EXTENSIONS.has(extension)) {
+          showNotice(`此格式 ${FORMAT_LABELS[extension] || extension.toUpperCase()} 常被手機瀏覽器拒播；若無法播放，請使用外部播放器或下載。`, "warn");
+        }
+
+        if (isHls(extension, mime, video)) {
+          if (shouldUseNativeHls()) {
+            player.src = video;
+            player.load();
+            setState("HLS 原生播放");
+          } else {
+            try {
+              await loadHlsScript();
+              if (token !== loadToken) return;
+              if (window.Hls && window.Hls.isSupported()) {
+                hlsInstance = new window.Hls({ enableWorker: true });
+                hlsInstance.on(window.Hls.Events.ERROR, (_, data) => {
+                  if (data && data.fatal) showPlaybackFailure(`HLS 播放失敗：${data.type || "unknown"} / ${data.details || "unknown"}`);
+                });
+                hlsInstance.loadSource(video);
+                hlsInstance.attachMedia(player);
+                setState("HLS.js 播放");
+              } else {
+                showPlaybackFailure("此瀏覽器不支援 HLS 播放。");
+              }
+            } catch (error) {
+              showPlaybackFailure(error.message || "HLS 播放器載入失敗。");
+            }
+          }
+        } else {
+          const source = document.createElement("source");
+          source.src = video;
+          source.type = mime;
+          player.appendChild(source);
+          player.load();
+        }
+
+        diagnosticsTimer = window.setTimeout(() => {
+          if (token === loadToken && player.readyState < 2) {
+            showPlaybackFailure("影片載入逾時。常見原因是手機瀏覽器不支援此容器或編碼，例如 HEVC、MKV、AVI、FLV。");
+          }
+        }, 12000);
+      }
+
+      function browserSupportSummary(mime, extension) {
+        const checks = [
+          ["MP4 H.264/AAC", 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"'],
+          ["MP4 HEVC/H.265", 'video/mp4; codecs="hvc1.1.6.L93.B0"'],
+          ["MOV", "video/quicktime"],
+          ["WebM VP9", 'video/webm; codecs="vp9, opus"'],
+          ["OGG", "video/ogg"],
+          ["HLS", "application/vnd.apple.mpegurl"],
+          ["目前格式", mime]
+        ];
+        const rows = checks.map(([label, type]) => {
+          const value = player.canPlayType(type) || "no";
+          return `<div class="meta-row"><span>${label}</span><strong class="value">${value}</strong></div>`;
+        });
+        if (BROWSER_RISKY_EXTENSIONS.has(extension)) {
+          rows.push(`<div class="meta-row"><span>格式提醒</span><strong class="value">${FORMAT_LABELS[extension] || extension.toUpperCase()} 多數手機瀏覽器不原生支援</strong></div>`);
+        }
+        return rows.join("");
+      }
+
+      function updateDiagnostics(mime, extension) {
+        diagnostics.classList.remove("hidden");
+        diagnostics.innerHTML = browserSupportSummary(mime, extension);
+      }
+
+      function playbackErrorMessage() {
+        const code = player.error?.code || 0;
+        if (code === 1) return "播放已中止。";
+        if (code === 2) return "網路載入失敗。";
+        if (code === 3) return "影片解碼失敗，通常是編碼不支援。";
+        if (code === 4) return "此瀏覽器不支援這個影片格式或編碼。";
+        return "影片無法播放。";
+      }
+
+      function showPlaybackFailure(message) {
+        setState("無法播放");
+        showNotice(`${message}\n可嘗試：原始影片、外部播放器、下載影片。`, "error");
+      }
+
+      function applyVideoFromLocation() {
+        const video = firstValue("v", "video");
+        const name = firstValue("n", "name") || "replay-video.mp4";
+        const uid = firstValue("uid", "id") || "-";
+        const size = firstValue("s", "size");
+        const rawMime = firstValue("m", "mime", "type");
+        const rawExt = firstValue("ext", "format");
+        const extension = extensionFrom(rawExt || name || video);
+        const mime = mimeFrom(extension, rawMime);
+        const allowDownload = (firstValue("download") || "1") !== "0";
+        const shouldReloadVideo = currentVideo !== video || currentMime !== mime || player.currentSrc !== video;
+
+        currentVideo = video;
+        currentName = name;
+        currentMime = mime;
+        currentExtension = extension;
+        fileName.textContent = name;
+        uidText.textContent = uid;
+        sizeText.textContent = formatBytes(size);
+        formatText.textContent = `${FORMAT_LABELS[extension] || extension.toUpperCase() || "未知"} / ${mime}`;
+        sourceText.textContent = video || "-";
+        subtitle.textContent = "手機觀看與下載頁";
+        hideNotice();
+        updateDiagnostics(mime, extension);
+
+        if (!video || !isHttpVideoUrl(video)) {
+          subtitle.textContent = "影片連結不存在";
+          setControlsVisible(false);
+          showNotice("此 QR 沒有帶入有效影片網址，請回到車機重新上傳並產生新的二維碼。", "error");
+          return;
+        }
+
+        setControlsVisible(true);
+        download.classList.toggle("hidden", !allowDownload);
+        openDirect.href = video;
+        if (shouldReloadVideo) void forceLoadVideo(video, mime, extension);
+      }
+
+      player.addEventListener("loadedmetadata", () => {
+        clearTimeout(diagnosticsTimer);
+        setState(`可播放，長度 ${Number.isFinite(player.duration) ? player.duration.toFixed(1) + " 秒" : "未知"}`);
+      });
+      player.addEventListener("canplay", () => setState("可播放"));
+      player.addEventListener("playing", () => setState("播放中"));
+      player.addEventListener("waiting", () => setState("緩衝中"));
+      player.addEventListener("stalled", () => showNotice("影片讀取暫停，正在等待網路或雲端回應。", "warn"));
+      player.addEventListener("error", () => showPlaybackFailure(playbackErrorMessage()));
+
+      download.addEventListener("click", async () => {
+        if (!currentVideo) return;
+        const originalText = download.textContent;
+        download.disabled = true;
+        download.textContent = "準備下載...";
+        try {
+          const response = await fetch(currentVideo, { mode: "cors", cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = currentName || "replay-video.mp4";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+          showNotice("已送出下載。若 LINE 或 iOS 內建瀏覽器沒有存檔，請點「原始影片」後用瀏覽器分享或儲存。");
+        } catch (error) {
+          window.open(currentVideo, "_blank", "noopener");
+          showNotice("此瀏覽器限制直接下載，已開啟原始影片；請用瀏覽器選單儲存或分享。", "warn");
+        } finally {
+          download.disabled = false;
+          download.textContent = originalText;
+        }
+      });
+
+      externalPlayer.addEventListener("click", () => {
+        if (!currentVideo) return;
+        location.href = currentVideo;
+      });
+
+      share.addEventListener("click", async () => {
+        if (!currentVideo) return;
+        const shareData = {
+          title: "回放中心",
+          text: `${currentName} 觀看與下載連結`,
+          url: location.href
+        };
+        if (navigator.share) {
+          await navigator.share(shareData);
+          return;
+        }
+        await copyCurrentUrl("此瀏覽器沒有分享視窗，已複製播放連結。");
+      });
+
+      lineShare.addEventListener("click", () => {
+        if (!currentVideo) return;
+        const text = encodeURIComponent(`${currentName}\n${location.href}`);
+        location.href = `https://line.me/R/msg/text/?${text}`;
+      });
+
+      async function copyCurrentUrl(message) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(location.href);
+          showNotice(message || "已複製播放連結。");
+        } else {
+          window.prompt("請複製播放連結", location.href);
+        }
+      }
+
+      copy.addEventListener("click", async () => {
+        if (!currentVideo) return;
+        await copyCurrentUrl("已複製播放連結。");
+      });
+
+      window.addEventListener("hashchange", applyVideoFromLocation);
+      window.addEventListener("popstate", applyVideoFromLocation);
+      window.addEventListener("pageshow", applyVideoFromLocation);
+      applyVideoFromLocation();
+    </script>
+  </body>
+</html>

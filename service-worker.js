@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v224-warranty-sheet-layout";
+const cacheName = "shen-yue-assistant-v229-replay-clean-share";
 const assets = [
   "./",
   "./index.html",
@@ -7,6 +7,12 @@ const assets = [
   "./updates.json",
   "./shen-yue-assistant-content.json",
   "./manifest.webmanifest",
+  "./replay-center/index.html",
+  "./replay-center/compat-app.js",
+  "./replay-center/watch/index.html",
+  "./replay-center/remote-config.json",
+  "./replay-center/manifest.webmanifest",
+  "./replay-center/favicon.svg",
   "./assets/app-logo.png",
   "./assets/update-splash.png",
   "./assets/sy-product-icons.png",

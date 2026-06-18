@@ -122,6 +122,21 @@ textarea {
   text-decoration: none;
 }
 
+.hero-actions {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(112px, 1fr));
+  gap: clamp(8px, 1.4vw, 18px);
+  width: min(100%, 980px);
+}
+
+.hero-actions button {
+  min-height: clamp(48px, 6vw, 78px);
+  padding: 0 clamp(10px, 1.8vw, 26px);
+  border-radius: 8px;
+  font-size: clamp(18px, 2.1vw, 30px);
+  white-space: nowrap;
+}
+
 .hero {
   position: relative;
   min-height: 540px;
@@ -199,8 +214,8 @@ h3 {
   top: 72px;
   z-index: 19;
   display: grid;
-  grid-template-columns: repeat(6, minmax(90px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(7, minmax(84px, 1fr));
+  gap: 7px;
   max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -216,13 +231,16 @@ h3 {
 }
 
 .tab-bar button {
-  min-height: 52px;
+  min-height: 48px;
+  padding: 0 10px;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 8px;
+  font-size: clamp(16px, 1.55vw, 25px);
   font-weight: 900;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .tab-bar button.active {
@@ -352,6 +370,32 @@ h3 {
 
 .blind-icon {
   background-image: url("assets/icon-blind-spot.png");
+}
+
+.replay-panel {
+  padding: clamp(20px, 4vw, 46px) clamp(10px, 3vw, 28px);
+}
+
+.replay-head {
+  max-width: 1100px;
+}
+
+.replay-frame-wrap {
+  min-height: min(920px, calc(100dvh - 172px));
+  overflow: hidden;
+  background: #090b0c;
+  border: 1px solid rgba(72, 216, 255, 0.34);
+  border-radius: 8px;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.34), 0 0 30px rgba(72, 216, 255, 0.13);
+}
+
+.replay-frame {
+  display: block;
+  width: 100%;
+  height: min(920px, calc(100dvh - 172px));
+  min-height: 720px;
+  background: #090b0c;
+  border: 0;
 }
 
 .icon-1 { background-position: 0% 0%; }
@@ -1660,7 +1704,11 @@ body.video-modal-open {
 
   .tab-bar {
     top: 92px;
-    grid-template-columns: repeat(6, 108px);
+    grid-template-columns: repeat(7, 96px);
+  }
+
+  .hero-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .dashboard-grid,
@@ -1715,6 +1763,11 @@ body.video-modal-open {
   .update-detail-actions .secondary-button,
   .update-upload-actions button {
     width: 100%;
+  }
+
+  .replay-frame-wrap,
+  .replay-frame {
+    min-height: 680px;
   }
 
   .update-app-image {

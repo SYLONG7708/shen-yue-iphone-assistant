@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#090b0c" />
+    <meta
+      name="description"
+      content="回放中心：車載 Android 影片上傳、一次性 QR、手機觀看與下載測試版。"
+    />
+    <title>回放中心</title>
+    <style>
+      html,
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background: #090b0c;
+        color: #e8f3ee;
+        font-family: "Microsoft JhengHei", "PingFang TC", Arial, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        background:
+          linear-gradient(90deg, rgba(58, 214, 179, 0.06) 1px, transparent 1px),
+          linear-gradient(180deg, rgba(180, 222, 94, 0.05) 1px, transparent 1px),
+          radial-gradient(circle at 20% 0%, rgba(49, 197, 153, 0.16), transparent 34%),
+          #090b0c;
+        background-size: 48px 48px, 48px 48px, auto, auto;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      .app {
+        width: min(1180px, 100%);
+        margin: 0 auto;
+        padding: 18px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 14px 0 18px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .brand-mark,
+      .step-icon {
+        display: grid;
+        place-items: center;
+        width: 46px;
+        height: 46px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #28c49a, #a8d45d);
+        color: #06120e;
+        font-weight: 900;
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 30px;
+        line-height: 1.08;
+        letter-spacing: 0;
+      }
+
+      .brand p,
+      .muted {
+        margin: 4px 0 0;
+        color: #8ea19a;
+        line-height: 1.5;
+      }
+
+      .badge {
+        border: 1px solid rgba(168, 212, 93, 0.28);
+        border-radius: 999px;
+        padding: 9px 12px;
+        color: #cce9dc;
+        background: rgba(17, 21, 24, 0.88);
+        white-space: nowrap;
+      }
+
+      .server-settings-panel + .panel {
+        margin-top: 0;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.12fr 0.88fr;
+        gap: 14px;
+      }
+
+      .panel {
+        border: 1px solid rgba(168, 212, 93, 0.22);
+        border-radius: 8px;
+        background: rgba(17, 21, 24, 0.94);
+        box-shadow: 0 18px 56px rgba(0, 0, 0, 0.26);
+        padding: 16px;
+      }
+
+      .panel + .panel {
+        margin-top: 14px;
+      }
+
+      .panel-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 13px;
+      }
+
+      .panel-title h2 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: 0;
+      }
+
+      .step-icon {
+        width: 34px;
+        height: 34px;
+        font-size: 13px;
+      }
+
+      .field-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      label {
+        display: grid;
+        gap: 7px;
+        color: #aebdb7;
+        font-size: 14px;
+      }
+
+      input,
+      select {
+        width: 100%;
+        min-height: 46px;
+        border: 1px solid rgba(168, 212, 93, 0.22);
+        border-radius: 8px;
+        background: #0b0f11;
+        color: #f3fbf7;
+        padding: 10px 12px;
+        outline: none;
+      }
+
+      input:focus,
+      select:focus {
+        border-color: #28c49a;
+        box-shadow: 0 0 0 3px rgba(40, 196, 154, 0.18);
+      }
+
+      .quick-row,
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .button,
+      button,
+      .link-button {
+        min-height: 46px;
+        border: 1px solid rgba(168, 212, 93, 0.26);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.055);
+        color: #f3fbf7;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 14px;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      .primary {
+        border: 0;
+        background: linear-gradient(135deg, #28c49a, #a8d45d);
+        color: #06120e;
+        font-weight: 900;
+      }
+
+      button:disabled,
+      .is-disabled {
+        cursor: not-allowed;
+        opacity: 0.48;
+      }
+
+      .drop {
+        display: grid;
+        place-items: center;
+        gap: 8px;
+        min-height: 188px;
+        border: 1px dashed rgba(168, 212, 93, 0.42);
+        border-radius: 8px;
+        background: rgba(11, 15, 17, 0.9);
+        text-align: center;
+        padding: 18px;
+      }
+
+      .drop strong {
+        color: #f3fbf7;
+        font-size: 18px;
+        word-break: break-all;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .notice {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        border: 1px solid rgba(168, 212, 93, 0.2);
+        border-radius: 8px;
+        background: rgba(168, 212, 93, 0.08);
+        color: #d8ead5;
+        padding: 12px;
+        line-height: 1.6;
+      }
+
+      .notice.error {
+        border-color: rgba(255, 106, 106, 0.42);
+        background: rgba(255, 106, 106, 0.08);
+        color: #ffc7c7;
+      }
+
+      .notice.busy {
+        border-color: rgba(76, 201, 240, 0.36);
+        background: rgba(76, 201, 240, 0.08);
+        color: #cceffc;
+      }
+
+      .progress {
+        height: 10px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #080b0d;
+        border: 1px solid rgba(168, 212, 93, 0.14);
+        margin-top: 12px;
+      }
+
+      .progress span {
+        display: block;
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, #28c49a, #a8d45d);
+        transition: width 0.18s ease;
+      }
+
+      .video-frame {
+        display: grid;
+        min-height: 260px;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #030506;
+        border: 1px solid rgba(168, 212, 93, 0.18);
+      }
+
+      video {
+        width: 100%;
+        height: 100%;
+        max-height: 430px;
+        object-fit: contain;
+        background: #000;
+      }
+
+      .empty-preview {
+        display: grid;
+        place-items: center;
+        color: #7f918a;
+      }
+
+      .qr-wrap {
+        display: grid;
+        gap: 12px;
+        place-items: center;
+        min-height: 285px;
+        border: 1px solid rgba(168, 212, 93, 0.18);
+        border-radius: 8px;
+        background: #f4fff8;
+        color: #17211d;
+        padding: 16px;
+        text-align: center;
+      }
+
+      .qr-wrap img {
+        width: min(260px, 100%);
+        height: auto;
+        image-rendering: crisp-edges;
+      }
+
+      .result-box {
+        margin-top: 12px;
+        border: 1px solid rgba(168, 212, 93, 0.18);
+        border-radius: 8px;
+        background: #0b0f11;
+        padding: 12px;
+        color: #cfe0d9;
+        line-height: 1.7;
+        word-break: break-all;
+      }
+
+      .metric-row {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin: 14px 0;
+      }
+
+      .metric {
+        border: 1px solid rgba(168, 212, 93, 0.16);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 12px;
+      }
+
+      .metric span {
+        display: block;
+        color: #8ea19a;
+        font-size: 13px;
+      }
+
+      .metric strong {
+        display: block;
+        margin-top: 5px;
+        color: #f3fbf7;
+      }
+
+      @media (max-width: 840px) {
+        .app {
+          padding: 12px;
+        }
+
+        .topbar,
+        .grid {
+          display: block;
+        }
+
+        .badge {
+          display: inline-block;
+          margin-top: 12px;
+        }
+
+        .field-grid,
+        .metric-row {
+          grid-template-columns: 1fr;
+        }
+
+        .panel {
+          margin-top: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">RC</div>
+          <div>
+            <h1>回放中心</h1>
+            <p>雷霆模擬器上傳測試版</p>
+          </div>
+        </div>
+        <div class="badge hidden" id="runtimeBadge">WebView 相容模式</div>
+      </header>
+
+      <section class="metric-row" aria-label="流程">
+        <div class="metric"><span>流程 1</span><strong>選擇影片</strong></div>
+        <div class="metric"><span>流程 2</span><strong>上傳雲端</strong></div>
+        <div class="metric"><span>流程 3</span><strong>產生 QR</strong></div>
+        <div class="metric"><span>流程 4</span><strong>手機觀看下載</strong></div>
+      </section>
+
+      <div class="grid">
+        <section>
+          <div class="panel server-settings-panel hidden" aria-hidden="true">
+            <div class="panel-title">
+              <div class="step-icon">API</div>
+              <h2>測試伺服器設定</h2>
+            </div>
+            <div class="notice" id="statusBox">
+              <strong>狀態</strong>
+              <span id="statusText">請先啟動 demo server，再選擇影片上傳。</span>
+            </div>
+            <div class="quick-row">
+              <button type="button" data-host="https://shanghai-hiv-teens-halifax.trycloudflare.com">套用 Cloudflare HTTPS</button>
+              <button type="button" id="pingButton">測試連線</button>
+            </div>
+            <div class="field-grid" style="margin-top: 12px">
+              <label>
+                <span>上傳 API</span>
+                <input id="endpointInput" autocomplete="off" />
+              </label>
+              <label>
+                <span>一次性 QR API</span>
+                <input id="oneTimeInput" autocomplete="off" />
+              </label>
+              <label>
+                <span>上傳模式</span>
+                <select id="modeInput">
+                  <option value="PUT">PUT Binary</option>
+                  <option value="POST">POST FormData</option>
+                </select>
+              </label>
+              <label>
+                <span>Bearer Token</span>
+                <input id="tokenInput" autocomplete="off" type="password" placeholder="正式雲端才需要" />
+              </label>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-title">
+              <div class="step-icon">UP</div>
+              <h2>車機提交影片</h2>
+            </div>
+            <button class="drop" id="pickButton" type="button">
+              <strong id="fileName">選擇 MP4 / MOV / MKV 影片</strong>
+              <span class="muted" id="fileMeta">點擊後從雷霆模擬器選檔</span>
+            </button>
+            <input class="hidden" id="fileInput" type="file" accept="video/*,.mp4,.m4v,.mov,.mkv,.webm" />
+            <div class="progress"><span id="progressBar"></span></div>
+            <div class="actions">
+              <button class="primary" id="uploadButton" type="button" disabled>上傳並產生 QR</button>
+              <button id="shareButton" type="button" disabled>分享通訊APP</button>
+              <button id="resetButton" type="button">清除重選</button>
+            </div>
+          </div>
+        </section>
+
+        <aside>
+          <div class="panel">
+            <div class="panel-title">
+              <div class="step-icon">PV</div>
+              <h2>影片預覽</h2>
+            </div>
+            <div class="video-frame">
+              <video id="previewVideo" class="hidden" controls playsinline></video>
+              <div class="empty-preview" id="emptyPreview">尚未選擇影片</div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-title">
+              <div class="step-icon">QR</div>
+              <h2>一次性二維碼</h2>
+            </div>
+            <div class="qr-wrap" id="qrWrap">
+              <div>
+                <strong>等待上傳完成</strong>
+                <p class="muted">完成後會顯示手機掃碼觀看與下載連結。</p>
+              </div>
+            </div>
+            <div class="actions">
+              <a class="link-button is-disabled" id="openWatchButton" href="#" target="_blank" rel="noreferrer">開啟觀看頁</a>
+              <button id="copyWatchButton" type="button" disabled>複製連結</button>
+            </div>
+            <div class="result-box" id="resultBox">尚未產生連結</div>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <script src="./compat-app.js"></script>
+  </body>
+</html>

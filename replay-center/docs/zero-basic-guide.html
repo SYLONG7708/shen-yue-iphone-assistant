@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>回放中心零基礎教學</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+        background: #090b0c;
+        color: #d7e2dd;
+      }
+      body {
+        margin: 0;
+        padding: 28px;
+        background:
+          linear-gradient(90deg, rgba(79, 209, 197, 0.05) 1px, transparent 1px),
+          linear-gradient(180deg, rgba(168, 212, 93, 0.04) 1px, transparent 1px),
+          #090b0c;
+        background-size: 54px 54px;
+      }
+      main {
+        max-width: 920px;
+        margin: 0 auto;
+      }
+      h1,
+      h2 {
+        color: #f3fbf7;
+        letter-spacing: 0;
+      }
+      h1 {
+        font-size: 34px;
+        margin: 0 0 14px;
+      }
+      section {
+        border: 1px solid rgba(168, 212, 93, 0.2);
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 16px;
+        background: rgba(17, 21, 24, 0.92);
+      }
+      code,
+      pre {
+        font-family: Consolas, ui-monospace, monospace;
+        background: rgba(255, 255, 255, 0.06);
+        color: #f2c94c;
+        border-radius: 6px;
+      }
+      code {
+        padding: 2px 6px;
+      }
+      pre {
+        overflow: auto;
+        padding: 14px;
+      }
+      li {
+        margin: 10px 0;
+        line-height: 1.7;
+      }
+      .note {
+        color: #8fa09a;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>回放中心零基礎教學</h1>
+      <p class="note">車機上傳影片、產生一次性二維碼、手機掃碼觀看與下載。</p>
+
+      <section>
+        <h2>一、同 Wi-Fi 測試一次性 QR</h2>
+        <ol>
+          <li>在電腦開啟 PowerShell。</li>
+          <li>輸入：</li>
+        </ol>
+        <pre>cd C:\Users\Administrator\ReplayCenter
+npm run server:once</pre>
+        <p>畫面會顯示上傳 API 和一次性 API。</p>
+      </section>
+
+      <section>
+        <h2>二、App 上傳設定</h2>
+        <ol>
+          <li>車機和手機連到同一個 Wi-Fi。</li>
+          <li>找出電腦的區網 IP，例如 <code>192.168.1.8</code>。</li>
+          <li>App 進入「上傳設定」。</li>
+          <li>上傳 API 填：<code>http://192.168.1.8:8787/api/upload/{filename}</code></li>
+          <li>一次性連結 API 填：<code>http://192.168.1.8:8787/api/one-time-links</code></li>
+          <li>傳輸格式選 <code>PUT Binary</code>。</li>
+          <li>依需求選「允許下載」或「只觀看」。</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>三、車機提交影片</h2>
+        <ol>
+          <li>進入「上傳分享」。</li>
+          <li>選擇 MP4 影片。</li>
+          <li>按「上傳並產生 QR」。</li>
+          <li>App 會自動切到「一次 QR」。</li>
+          <li>手機掃描二維碼即可看影片；若允許下載，頁面會有下載按鈕。</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>四、正式上線注意</h2>
+        <p>
+          正式一次性 QR 必須放在真正的雲端後端，例如 NAS、公司伺服器、S3/R2 搭配 API、VPS 或雲端函式。
+          純前端頁面只能做測試 QR，不能保證只能看一次。
+        </p>
+      </section>
+
+      <section>
+        <h2>五、建置 APK</h2>
+        <pre>cd C:\Users\Administrator\ReplayCenter
+npm run build
+npx cap sync android
+cd android
+.\gradlew.bat assembleDebug</pre>
+      </section>
+    </main>
+  </body>
+</html>

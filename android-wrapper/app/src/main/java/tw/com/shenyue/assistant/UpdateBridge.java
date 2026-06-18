@@ -58,6 +58,46 @@ public class UpdateBridge {
     }
 
     @JavascriptInterface
+    public String shareText(String title, String text, String url) {
+        JSONObject result = new JSONObject();
+        try {
+            String safeTitle = title == null || title.trim().length() == 0 ? "回放中心影片" : title.trim();
+            String safeText = text == null ? "" : text.trim();
+            String safeUrl = url == null ? "" : url.trim();
+            String shareBody = safeText.length() > 0 ? safeText : safeUrl;
+            if (safeUrl.length() > 0 && !shareBody.contains(safeUrl)) {
+                shareBody = shareBody.length() > 0 ? shareBody + "\n" + safeUrl : safeUrl;
+            }
+            if (shareBody.length() == 0) {
+                result.put("ok", false);
+                result.put("message", "沒有可分享的連結。");
+                return result.toString();
+            }
+
+            final String finalTitle = safeTitle;
+            final String finalBody = shareBody;
+            activity.runOnUiThread(() -> {
+                Intent sendIntent = new Intent(Intent.ACTION_SEND);
+                sendIntent.setType("text/plain");
+                sendIntent.putExtra(Intent.EXTRA_SUBJECT, finalTitle);
+                sendIntent.putExtra(Intent.EXTRA_TEXT, finalBody);
+                Intent chooser = Intent.createChooser(sendIntent, "分享回放影片");
+                try {
+                    activity.startActivity(chooser);
+                } catch (ActivityNotFoundException error) {
+                    Toast.makeText(activity, "找不到可分享的通訊 APP。", Toast.LENGTH_LONG).show();
+                }
+            });
+
+            result.put("ok", true);
+            return result.toString();
+        } catch (Exception error) {
+            putError(result, error);
+            return result.toString();
+        }
+    }
+
+    @JavascriptInterface
     public String getDeviceState() {
         JSONObject result = new JSONObject();
         try {

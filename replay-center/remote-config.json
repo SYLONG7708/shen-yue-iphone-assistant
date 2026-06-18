@@ -1,0 +1,25 @@
+{
+  "version": "1.1.0",
+  "updatedAt": "2026-06-17 01:30",
+  "headline": "車機上傳影片，一次性 QR 掃碼觀看",
+  "announcement": "車機提交 MP4 到雲端後，可產生一次性二維碼。手機首次掃碼可看影片，並依設定下載影片。",
+  "serviceStatus": "一次性 QR 模組已加入",
+  "videos": [
+    {
+      "id": "demo-once-001",
+      "title": "一次性 QR 示範影片",
+      "category": "一次性觀看",
+      "date": "2026-06-17",
+      "duration": "03:18",
+      "size": "128 MB",
+      "url": "https://example.com/replay/demo-once-001.mp4",
+      "note": "正式使用請改成雲端上傳後回傳的影片網址"
+    }
+  ],
+  "tips": [
+    "車機先上傳影片到雲端，再由一次性 API 產生 QR Code。",
+    "手機掃碼後進入觀看頁，可播放影片；若啟用下載，頁面會顯示下載按鈕。",
+    "真正的一次性必須由雲端後端控管 token，第二次掃碼要回傳已使用或已過期。",
+    "測試可使用 npm run server:once 啟動同 Wi-Fi 示範伺服器。"
+  ]
+}
