@@ -207,13 +207,13 @@
       }
 
       .drop {
-        display: grid;
+        display: none;
         place-items: center;
         gap: 8px;
         min-height: 188px;
-        border: 1px dashed rgba(168, 212, 93, 0.42);
+        border: 0;
         border-radius: 8px;
-        background: rgba(11, 15, 17, 0.9);
+        background: transparent;
         text-align: center;
         padding: 18px;
       }
@@ -306,6 +306,21 @@
         height: 100%;
         background: linear-gradient(90deg, #28c49a, #a8d45d);
         transition: width 0.18s ease;
+      }
+
+      .progress.is-indeterminate span {
+        width: 38%;
+        animation: progress-sweep 1.1s ease-in-out infinite;
+      }
+
+      @keyframes progress-sweep {
+        0% {
+          transform: translateX(-110%);
+        }
+
+        100% {
+          transform: translateX(270%);
+        }
       }
 
       .video-frame {
@@ -420,7 +435,6 @@
           <div class="brand-mark">RC</div>
           <div>
             <h1>回放中心</h1>
-            <p>雷霆模擬器上傳測試版</p>
           </div>
         </div>
         <div class="badge hidden" id="runtimeBadge">WebView 相容模式</div>
@@ -476,9 +490,9 @@
               <div class="step-icon">UP</div>
               <h2>車機提交影片</h2>
             </div>
-            <button class="drop" id="pickButton" type="button">
-              <strong id="fileName">選擇 MP4 / TS / MOV 影片</strong>
-              <span class="muted" id="fileMeta">點擊後從雷霆模擬器選檔</span>
+            <button class="drop" id="pickButton" type="button" aria-label="選擇影片">
+              <strong id="fileName"></strong>
+              <span class="muted" id="fileMeta"></span>
             </button>
             <input class="hidden" id="fileInput" type="file" accept="video/*,.mp4,.m4v,.mov,.mkv,.webm,.ts,.mts,.m2ts" />
             <div class="native-video-tools hidden" id="nativeVideoTools">
@@ -488,7 +502,7 @@
               </div>
               <div class="native-video-list" id="nativeVideoList"></div>
             </div>
-            <div class="progress"><span id="progressBar"></span></div>
+            <div class="progress" id="progressWrap"><span id="progressBar"></span></div>
             <div class="actions">
               <button class="primary" id="uploadButton" type="button" disabled>上傳並產生 QR</button>
               <button id="shareButton" type="button" disabled>分享通訊APP</button>

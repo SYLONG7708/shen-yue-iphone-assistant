@@ -68,6 +68,7 @@ public class UpdateBridge {
     private final PackageManager packageManager;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ConcurrentHashMap<String, UpdateTask> tasks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, VideoPrepareTask> videoPrepareTasks = new ConcurrentHashMap<>();
     private volatile Uri lastSelectedFileUri;
 
     UpdateBridge(Activity activity) {
@@ -376,6 +377,41 @@ public class UpdateBridge {
             putError(result, error);
         }
         return result.toString();
+    }
+
+    @JavascriptInterface
+    public String prepareLocalVideoAsync(String source, String fileName, String mimeType) {
+        JSONObject result = new JSONObject();
+        try {
+            String safeSource = source == null ? "" : source.trim();
+            if (safeSource.length() == 0) {
+                result.put("ok", false);
+                result.put("message", "No local video was selected.");
+                return result.toString();
+            }
+
+            String id = "video-" + System.currentTimeMillis();
+            VideoPrepareTask task = new VideoPrepareTask(id);
+            videoPrepareTasks.put(id, task);
+            result.put("ok", true);
+            result.put("taskId", id);
+            result.put("status", task.status);
+            result.put("progress", task.progress);
+            result.put("message", task.message);
+            executor.execute(() -> runPrepareLocalVideo(task, safeSource, fileName, mimeType));
+        } catch (Exception error) {
+            putError(result, error);
+        }
+        return result.toString();
+    }
+
+    @JavascriptInterface
+    public String getLocalVideoPrepareStatus(String taskId) {
+        VideoPrepareTask task = videoPrepareTasks.get(taskId == null ? "" : taskId);
+        if (task == null) {
+            return "{\"ok\":false,\"message\":\"Video prepare task was not found.\"}";
+        }
+        return task.toJson().toString();
     }
 
     @JavascriptInterface
@@ -784,6 +820,33 @@ public class UpdateBridge {
     }
 
     private PreparedVideo preparePlayableVideo(String source, String fileName, String mimeType) throws Exception {
+        return preparePlayableVideo(source, fileName, mimeType, null);
+    }
+
+    private void runPrepareLocalVideo(VideoPrepareTask task, String source, String fileName, String mimeType) {
+        try {
+            task.status = "running";
+            task.progress = 1;
+            task.message = "Preparing video...";
+            PreparedVideo prepared = preparePlayableVideo(source, fileName, mimeType, task);
+            task.uri = prepared.uri;
+            task.fileName = prepared.fileName;
+            task.mimeType = prepared.mimeType;
+            task.size = prepared.size;
+            task.converted = prepared.converted;
+            task.indeterminate = false;
+            task.progress = 100;
+            task.status = "done";
+            task.message = prepared.converted ? "MP4 is ready." : "Video is ready.";
+        } catch (Exception error) {
+            task.indeterminate = false;
+            task.progress = 100;
+            task.status = "failed";
+            task.message = safeMessage(error);
+        }
+    }
+
+    private PreparedVideo preparePlayableVideo(String source, String fileName, String mimeType, VideoPrepareTask task) throws Exception {
         Uri uri = source.startsWith("/") ? null : Uri.parse(source);
         String name = fileName == null || fileName.trim().length() == 0 ? "" : fileName.trim();
         String type = mimeType == null || mimeType.trim().length() == 0 ? "" : mimeType.trim();
@@ -793,8 +856,8 @@ public class UpdateBridge {
             if (name.length() == 0) name = "replay-video.mp4";
             if (type.length() == 0) type = guessVideoMime(name);
             if (isTransportStreamName(name) || isTransportStreamMime(type)) {
-                File cachedSource = copyContentVideoToCache(uri, name);
-                File mp4File = remuxTransportStreamToMp4(cachedSource, name);
+                File cachedSource = copyContentVideoToCache(uri, name, task);
+                File mp4File = remuxTransportStreamToMp4(cachedSource, name, task);
                 return new PreparedVideo(Uri.fromFile(mp4File).toString(), toMp4FileName(name), "video/mp4", mp4File.length(), true);
             }
             long size = resolveContentSize(uri);
@@ -813,28 +876,55 @@ public class UpdateBridge {
         if (name.length() == 0) name = file.getName();
         if (type.length() == 0) type = guessVideoMime(name);
         if (isTransportStreamName(file.getName()) || (isTransportStreamName(name) && isTransportStreamMime(type))) {
-            File mp4File = remuxTransportStreamToMp4(file, name);
+            File mp4File = remuxTransportStreamToMp4(file, name, task);
             return new PreparedVideo(Uri.fromFile(mp4File).toString(), toMp4FileName(name), "video/mp4", mp4File.length(), true);
         }
         return new PreparedVideo(Uri.fromFile(file).toString(), name, type, file.length(), false);
     }
 
     private File copyContentVideoToCache(Uri uri, String fileName) throws Exception {
+        return copyContentVideoToCache(uri, fileName, null);
+    }
+
+    private File copyContentVideoToCache(Uri uri, String fileName, VideoPrepareTask task) throws Exception {
         File dir = remuxCacheDir();
         String safeName = safeFileName(fileName == null || fileName.trim().length() == 0 ? "replay-video.ts" : fileName.trim());
         File outFile = new File(dir, System.currentTimeMillis() + "-" + safeName);
+        long size = resolveContentSize(uri);
+        if (task != null) {
+            task.message = "Reading video...";
+            task.progress = 3;
+            task.indeterminate = size <= 0L;
+        }
         try (InputStream input = activity.getContentResolver().openInputStream(uri);
              FileOutputStream output = new FileOutputStream(outFile)) {
             if (input == null) throw new IllegalStateException("Unable to read the selected video.");
-            copyStream(input, output);
+            byte[] buffer = new byte[64 * 1024];
+            int read;
+            long total = 0L;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+                total += read;
+                if (task != null && size > 0L) {
+                    task.progress = Math.min(18, 3 + (int) ((total * 15L) / size));
+                }
+            }
         }
         if (outFile.length() <= 0) {
             throw new IllegalStateException("The selected video is empty.");
+        }
+        if (task != null) {
+            task.indeterminate = false;
+            task.progress = Math.max(task.progress, 18);
         }
         return outFile;
     }
 
     private File remuxTransportStreamToMp4(File source, String displayName) throws Exception {
+        return remuxTransportStreamToMp4(source, displayName, null);
+    }
+
+    private File remuxTransportStreamToMp4(File source, String displayName, VideoPrepareTask task) throws Exception {
         if (source == null || !source.exists() || !source.isFile()) {
             throw new IllegalStateException("Transport stream source file was not found.");
         }
@@ -856,6 +946,7 @@ public class UpdateBridge {
             boolean hasVideo = false;
             int selectedTracks = 0;
             int maxInputSize = 4 * 1024 * 1024;
+            long durationUs = -1L;
             for (int i = 0; i < trackCount; i += 1) {
                 MediaFormat format = extractor.getTrackFormat(i);
                 String mime = format.containsKey(MediaFormat.KEY_MIME) ? format.getString(MediaFormat.KEY_MIME) : "";
@@ -866,6 +957,9 @@ public class UpdateBridge {
                 if (mime.startsWith("video/")) hasVideo = true;
                 if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
                     maxInputSize = Math.max(maxInputSize, format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE));
+                }
+                if (format.containsKey(MediaFormat.KEY_DURATION)) {
+                    durationUs = Math.max(durationUs, format.getLong(MediaFormat.KEY_DURATION));
                 }
             }
 
@@ -879,6 +973,12 @@ public class UpdateBridge {
             muxer.start();
             muxerStarted = true;
             long writtenSamples = 0L;
+            long lastProgressAt = 0L;
+            if (task != null) {
+                task.message = "Converting TS to MP4...";
+                task.indeterminate = durationUs <= 0L;
+                task.progress = Math.max(task.progress, 20);
+            }
 
             while (true) {
                 int trackIndex = extractor.getSampleTrackIndex();
@@ -900,6 +1000,14 @@ public class UpdateBridge {
                 info.set(0, sampleSize, Math.max(0L, sampleTime), bufferFlags);
                 muxer.writeSampleData(outputTrack, buffer, info);
                 writtenSamples += 1L;
+                if (task != null && durationUs > 0L && sampleTime >= 0L) {
+                    long now = System.currentTimeMillis();
+                    if (now - lastProgressAt > 250L) {
+                        int progress = 20 + (int) Math.min(75L, (sampleTime * 75L) / durationUs);
+                        task.progress = Math.max(task.progress, Math.min(95, progress));
+                        lastProgressAt = now;
+                    }
+                }
                 extractor.advance();
             }
             if (writtenSamples == 0L) {
@@ -907,6 +1015,10 @@ public class UpdateBridge {
             }
             muxer.stop();
             muxerStarted = false;
+            if (task != null) {
+                task.indeterminate = false;
+                task.progress = Math.max(task.progress, 96);
+            }
         } catch (Exception error) {
             if (output.exists()) {
                 //noinspection ResultOfMethodCallIgnored
@@ -1432,6 +1544,43 @@ public class UpdateBridge {
             this.mimeType = mimeType;
             this.size = size;
             this.converted = converted;
+        }
+    }
+
+    private static class VideoPrepareTask {
+        final String id;
+        volatile String status = "queued";
+        volatile int progress = 0;
+        volatile boolean indeterminate = false;
+        volatile String message = "Waiting to prepare video.";
+        volatile String uri = "";
+        volatile String fileName = "";
+        volatile String mimeType = "";
+        volatile long size = 0L;
+        volatile boolean converted = false;
+
+        VideoPrepareTask(String id) {
+            this.id = id;
+        }
+
+        JSONObject toJson() {
+            JSONObject object = new JSONObject();
+            try {
+                object.put("ok", true);
+                object.put("taskId", id);
+                object.put("status", status);
+                object.put("progress", progress);
+                object.put("indeterminate", indeterminate);
+                object.put("message", message);
+                object.put("uri", uri);
+                object.put("fileName", fileName);
+                object.put("mimeType", mimeType);
+                object.put("size", size);
+                object.put("converted", converted);
+            } catch (JSONException ignored) {
+                // In-memory values are simple strings and numbers.
+            }
+            return object;
         }
     }
 

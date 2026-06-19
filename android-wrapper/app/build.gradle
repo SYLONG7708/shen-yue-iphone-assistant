@@ -45,8 +45,8 @@ android {
         applicationId "tw.com.shenyue.assistant"
         minSdk 23
         targetSdk 36
-        versionCode 123
-        versionName "1.0.23"
+        versionCode 124
+        versionName "1.0.24"
     }
 
     flavorDimensions "content"

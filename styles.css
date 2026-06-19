@@ -181,6 +181,11 @@ textarea {
 }
 
 .hero-content p,
+.hero-content h1 {
+  display: none;
+}
+
+.hero-content p,
 .panel-head p {
   margin: 0 0 12px;
   color: var(--cyan);

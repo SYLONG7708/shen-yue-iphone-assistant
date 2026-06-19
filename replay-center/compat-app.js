@@ -4,6 +4,7 @@
   var selectedNativeVideo = null
   var selectedObjectUrl = ''
   var lastWatchUrl = ''
+  var preparePollTimer = 0
   var preferredHost = 'https://shanghai-hiv-teens-halifax.trycloudflare.com'
 
   var defaults = {
@@ -30,6 +31,7 @@
     nativeScanButton: byId('nativeScanButton'),
     nativePermissionButton: byId('nativePermissionButton'),
     nativeVideoList: byId('nativeVideoList'),
+    progressWrap: byId('progressWrap'),
     progressBar: byId('progressBar'),
     uploadButton: byId('uploadButton'),
     shareButton: byId('shareButton'),
@@ -155,9 +157,18 @@
     el.statusText.innerHTML = text
   }
 
-  function setProgress(percent) {
+  function setProgress(percent, indeterminate) {
     var value = Math.max(0, Math.min(100, percent || 0))
+    if (el.progressWrap) {
+      el.progressWrap.className = indeterminate ? 'progress is-indeterminate' : 'progress'
+    }
     el.progressBar.style.width = value + '%'
+  }
+
+  function clearPreparePoll() {
+    if (!preparePollTimer) return
+    window.clearTimeout(preparePollTimer)
+    preparePollTimer = 0
   }
 
   function hasNativeVideoBridge() {
@@ -180,6 +191,14 @@
     return Boolean(
       window.ShenYueUpdater &&
         typeof window.ShenYueUpdater.prepareLocalVideo === 'function'
+    )
+  }
+
+  function canPrepareNativeVideoAsync() {
+    return Boolean(
+      window.ShenYueUpdater &&
+        typeof window.ShenYueUpdater.prepareLocalVideoAsync === 'function' &&
+        typeof window.ShenYueUpdater.getLocalVideoPrepareStatus === 'function'
     )
   }
 
@@ -279,6 +298,7 @@
   }
 
   function selectNativeVideo(item) {
+    clearPreparePoll()
     selectedFile = null
     selectedNativeVideo = item
     lastWatchUrl = ''
@@ -296,15 +316,75 @@
     if (item.uri) {
       if (isTransportStreamVideo(item) && canPrepareNativeVideo()) {
         hideNativePreview()
-        setStatus('busy', '正在準備 TS 影片為 MP4，完成後可預覽並產生可播放 QR。')
-        window.setTimeout(function () {
-          prepareSelectedNativeVideo(item)
-        }, 60)
+        el.uploadButton.disabled = true
+        setProgress(2, true)
+        setStatus('busy', '正在準備 TS 影片為 MP4，完成後可預覽並產生 QR。')
+        if (canPrepareNativeVideoAsync()) {
+          window.setTimeout(function () {
+            startPreparingSelectedNativeVideo(item)
+          }, 60)
+        } else {
+          window.setTimeout(function () {
+            prepareSelectedNativeVideo(item)
+          }, 60)
+        }
         return
       }
       showNativePreview(item.uri)
     }
     setStatus('ready', '已選擇車機影片：' + escapeHtml(item.name || 'replay-video.mp4'))
+  }
+
+  function startPreparingSelectedNativeVideo(item) {
+    if (!selectedNativeVideo || selectedNativeVideo.uri !== item.uri) return
+    var started = parseNativeResult(
+      window.ShenYueUpdater.prepareLocalVideoAsync(
+        item.uri || '',
+        item.name || 'replay-video.mp4',
+        item.mimeType || 'video/mp4'
+      )
+    )
+    if (!started.ok || !started.taskId) {
+      el.uploadButton.disabled = true
+      setProgress(0, false)
+      setStatus('error', 'TS 轉 MP4 啟動失敗：' + escapeHtml(started.message || '未知錯誤'))
+      return
+    }
+    pollNativeVideoPrepare(item, started.taskId)
+  }
+
+  function pollNativeVideoPrepare(item, taskId) {
+    if (!selectedNativeVideo || selectedNativeVideo.uri !== item.uri) return
+    var state = parseNativeResult(window.ShenYueUpdater.getLocalVideoPrepareStatus(taskId))
+    if (!selectedNativeVideo || selectedNativeVideo.uri !== item.uri) return
+
+    if (!state.ok) {
+      el.uploadButton.disabled = true
+      setProgress(0, false)
+      setStatus('error', 'TS 轉 MP4 失敗：' + escapeHtml(state.message || '未知錯誤'))
+      return
+    }
+
+    setProgress(state.progress || 0, Boolean(state.indeterminate))
+    if (state.status === 'done') {
+      clearPreparePoll()
+      applyPreparedNativeVideo(item, state)
+      return
+    }
+    if (state.status === 'failed') {
+      clearPreparePoll()
+      el.uploadButton.disabled = true
+      el.resultBox.innerHTML = 'TS 影片轉成 MP4 失敗，手機瀏覽器可能無法直接播放原始 TS。'
+      if (item.uri) showNativePreview(item.uri)
+      setProgress(0, false)
+      setStatus('error', 'TS 轉 MP4 失敗：' + escapeHtml(state.message || '未知錯誤'))
+      return
+    }
+
+    setStatus('busy', state.indeterminate ? '正在準備 MP4...' : '正在準備 MP4：' + (state.progress || 0) + '%')
+    preparePollTimer = window.setTimeout(function () {
+      pollNativeVideoPrepare(item, taskId)
+    }, 500)
   }
 
   function prepareSelectedNativeVideo(item) {
@@ -321,10 +401,17 @@
     if (!prepared.ok || !prepared.uri) {
       el.resultBox.innerHTML = 'TS 影片轉成 MP4 失敗，手機瀏覽器可能無法直接播放原始 TS。'
       if (item.uri) showNativePreview(item.uri)
+      el.uploadButton.disabled = true
+      setProgress(0, false)
       setStatus('error', 'TS 轉 MP4 失敗：' + escapeHtml(prepared.message || '未知錯誤'))
       return
     }
 
+    applyPreparedNativeVideo(item, prepared)
+  }
+
+  function applyPreparedNativeVideo(item, prepared) {
+    if (!selectedNativeVideo || selectedNativeVideo.uri !== item.uri) return
     selectedNativeVideo.previewUri = prepared.uri
     selectedNativeVideo.uploadUri = prepared.uri
     selectedNativeVideo.uploadName = prepared.fileName || item.name || 'replay-video.mp4'
@@ -343,11 +430,14 @@
       ? '已將 TS 準備為 MP4，預覽與 QR 會使用 MP4。'
       : '影片已準備完成，等待上傳。'
     showNativePreview(prepared.uri)
+    el.uploadButton.disabled = false
+    setProgress(100, false)
     setStatus('ready', '影片已準備完成：' + escapeHtml(selectedNativeVideo.uploadName))
   }
 
   function handleFile(file) {
     if (!file) return
+    clearPreparePoll()
     if (file.type && file.type.indexOf('video/') !== 0 && !/\.(mp4|m4v|mov|mkv|webm|ts|mts|m2ts)$/i.test(file.name)) {
       setStatus('error', '請選擇影片檔。')
       return
@@ -373,14 +463,15 @@
   }
 
   function resetFile() {
+    clearPreparePoll()
     selectedFile = null
     selectedNativeVideo = null
     lastWatchUrl = ''
     if (selectedObjectUrl) URL.revokeObjectURL(selectedObjectUrl)
     selectedObjectUrl = ''
     el.fileInput.value = ''
-    el.fileName.innerHTML = '選擇 MP4 / TS / MOV 影片'
-    el.fileMeta.innerHTML = '點擊後從雷霆模擬器選檔'
+    el.fileName.innerHTML = ''
+    el.fileMeta.innerHTML = ''
     el.previewVideo.removeAttribute('src')
     el.previewVideo.className = 'hidden'
     el.emptyPreview.className = 'empty-preview'
