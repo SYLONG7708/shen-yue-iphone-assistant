@@ -224,6 +224,45 @@
         word-break: break-all;
       }
 
+      .native-video-tools {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .native-video-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .native-video-list {
+        display: grid;
+        gap: 8px;
+        max-height: 260px;
+        overflow: auto;
+      }
+
+      .native-video-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        width: 100%;
+        border: 1px solid rgba(168, 212, 93, 0.18);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        color: #f3fbf7;
+        text-align: left;
+      }
+
+      .native-video-item small {
+        display: block;
+        margin-top: 4px;
+        color: #8ea19a;
+        word-break: break-all;
+      }
+
       .hidden {
         display: none !important;
       }
@@ -442,6 +481,13 @@
               <span class="muted" id="fileMeta">點擊後從雷霆模擬器選檔</span>
             </button>
             <input class="hidden" id="fileInput" type="file" accept="video/*,.mp4,.m4v,.mov,.mkv,.webm" />
+            <div class="native-video-tools hidden" id="nativeVideoTools">
+              <div class="native-video-row">
+                <button id="nativeScanButton" type="button">掃描 USB1/USB2</button>
+                <button id="nativePermissionButton" type="button">允許讀取 USB 影片</button>
+              </div>
+              <div class="native-video-list" id="nativeVideoList"></div>
+            </div>
             <div class="progress"><span id="progressBar"></span></div>
             <div class="actions">
               <button class="primary" id="uploadButton" type="button" disabled>上傳並產生 QR</button>

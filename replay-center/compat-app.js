@@ -1,6 +1,7 @@
 (function () {
   var SETTINGS_KEY = 'replay-center-compat-settings'
   var selectedFile = null
+  var selectedNativeVideo = null
   var selectedObjectUrl = ''
   var lastWatchUrl = ''
   var preferredHost = 'https://shanghai-hiv-teens-halifax.trycloudflare.com'
@@ -25,6 +26,10 @@
     fileInput: byId('fileInput'),
     fileName: byId('fileName'),
     fileMeta: byId('fileMeta'),
+    nativeVideoTools: byId('nativeVideoTools'),
+    nativeScanButton: byId('nativeScanButton'),
+    nativePermissionButton: byId('nativePermissionButton'),
+    nativeVideoList: byId('nativeVideoList'),
     progressBar: byId('progressBar'),
     uploadButton: byId('uploadButton'),
     shareButton: byId('shareButton'),
@@ -54,6 +59,13 @@
     setStatus('ready', '已套用公開 HTTPS 上傳伺服器 ' + preferredHost + '，請選擇影片上傳。')
     window.setTimeout(pingServer, 400)
 
+    if (hasNativeVideoBridge()) {
+      el.nativeVideoTools.className = 'native-video-tools'
+      el.runtimeBadge.className = 'badge'
+      el.runtimeBadge.innerHTML = 'Android APK 車機模式'
+      refreshNativeAccessState()
+    }
+
     if (window.Capacitor) {
       el.runtimeBadge.innerHTML = 'Capacitor WebView 相容模式'
     }
@@ -77,6 +89,8 @@
     el.pickButton.addEventListener('click', function () {
       el.fileInput.click()
     })
+    el.nativeScanButton.addEventListener('click', scanNativeVideos)
+    el.nativePermissionButton.addEventListener('click', requestNativeVideoAccess)
     el.fileInput.addEventListener('change', function () {
       handleFile(el.fileInput.files && el.fileInput.files[0])
     })
@@ -146,6 +160,119 @@
     el.progressBar.style.width = value + '%'
   }
 
+  function hasNativeVideoBridge() {
+    return Boolean(
+      window.ShenYueUpdater &&
+        typeof window.ShenYueUpdater.listLocalVideos === 'function' &&
+        typeof window.ShenYueUpdater.uploadLocalVideo === 'function'
+    )
+  }
+
+  function parseNativeResult(raw) {
+    try {
+      return JSON.parse(raw || '{}')
+    } catch (error) {
+      return { ok: false, message: 'Android 回傳資料格式錯誤。' }
+    }
+  }
+
+  function refreshNativeAccessState() {
+    if (!hasNativeVideoBridge() || typeof window.ShenYueUpdater.getVideoAccessState !== 'function') return
+    var state = parseNativeResult(window.ShenYueUpdater.getVideoAccessState())
+    if (!state.ok) {
+      el.nativeVideoList.innerHTML = '<div class="result-box">影片權限狀態讀取失敗：' + escapeHtml(state.message || '') + '</div>'
+      return
+    }
+    if (state.readVideoGranted || state.allFilesGranted) {
+      el.nativePermissionButton.innerHTML = state.allFilesGranted ? '已可讀取所有檔案' : '已可讀取影片'
+      el.nativeVideoList.innerHTML = '<div class="result-box">固定讀取 USB1/DCIM/CAMERA 與 USB2/DCIM/CAMERA 內的 MP4。</div>'
+      return
+    }
+    el.nativeVideoList.innerHTML = '<div class="result-box">車機尚未授權讀取 USB 影片，請先按「允許讀取影片」。</div>'
+  }
+
+  function requestNativeVideoAccess() {
+    if (!hasNativeVideoBridge() || typeof window.ShenYueUpdater.requestVideoAccess !== 'function') return
+    window.ShenYueUpdater.requestVideoAccess()
+    setStatus('ready', '已開啟 Android 權限畫面；授權後回到本頁再按「掃描 USB1/USB2」。')
+    window.setTimeout(refreshNativeAccessState, 800)
+  }
+
+  function scanNativeVideos() {
+    if (!hasNativeVideoBridge()) {
+      setStatus('error', '目前不是 Android APK 車機模式，請使用上方選檔。')
+      return
+    }
+    setStatus('busy', '正在掃描 USB1/DCIM/CAMERA 與 USB2/DCIM/CAMERA 內的 MP4。')
+    el.nativeVideoList.innerHTML = '<div class="result-box">掃描中...</div>'
+    window.setTimeout(function () {
+      var result = parseNativeResult(window.ShenYueUpdater.listLocalVideos())
+      if (!result.ok) {
+        el.nativeVideoList.innerHTML = '<div class="result-box">' + escapeHtml(result.message || '掃描失敗') + '</div>'
+        setStatus('error', escapeHtml(result.message || '掃描失敗'))
+        return
+      }
+      renderNativeVideos(result.items || [])
+    }, 60)
+  }
+
+  function renderNativeVideos(items) {
+    if (!items.length) {
+      el.nativeVideoList.innerHTML = '<div class="result-box">沒有找到 USB1/DCIM/CAMERA 或 USB2/DCIM/CAMERA 內的 MP4。請確認 USB 裡有 DCIM/CAMERA 資料夾。</div>'
+      setStatus('ready', '掃描完成，但 USB1/USB2 的 DCIM/CAMERA 沒有 MP4。')
+      return
+    }
+    el.nativeVideoList.innerHTML = ''
+    for (var i = 0; i < items.length; i += 1) {
+      appendNativeVideoItem(items[i])
+    }
+    setStatus('ready', '掃描完成，從 USB1/USB2 DCIM/CAMERA 找到 ' + items.length + ' 個 MP4。')
+  }
+
+  function appendNativeVideoItem(item) {
+    var button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'native-video-item'
+    var path = item.path ? '<small>' + escapeHtml(item.path) + '</small>' : ''
+    button.innerHTML =
+      '<span><strong>' +
+      escapeHtml(item.name || 'replay-video.mp4') +
+      '</strong>' +
+      path +
+      '</span><small>' +
+      escapeHtml(formatBytes(item.size || 0)) +
+      ' / ' +
+      escapeHtml(item.source || 'video') +
+      '</small>'
+    button.addEventListener('click', function () {
+      selectNativeVideo(item)
+    })
+    el.nativeVideoList.appendChild(button)
+  }
+
+  function selectNativeVideo(item) {
+    selectedFile = null
+    selectedNativeVideo = item
+    lastWatchUrl = ''
+    setProgress(0)
+    el.fileInput.value = ''
+    el.fileName.innerHTML = escapeHtml(item.name || 'replay-video.mp4')
+    el.fileMeta.innerHTML = formatBytes(item.size || 0) + ' / ' + (item.mimeType || 'video') + ' / ' + (item.source || 'USB MP4')
+    el.uploadButton.disabled = false
+    el.shareButton.disabled = true
+    el.resultBox.innerHTML = '已選擇車機影片，等待上傳。'
+    resetQr()
+
+    if (selectedObjectUrl) URL.revokeObjectURL(selectedObjectUrl)
+    selectedObjectUrl = ''
+    if (item.uri) {
+      el.previewVideo.src = item.uri
+      el.previewVideo.className = ''
+      el.emptyPreview.className = 'hidden'
+    }
+    setStatus('ready', '已選擇車機影片：' + escapeHtml(item.name || 'replay-video.mp4'))
+  }
+
   function handleFile(file) {
     if (!file) return
     if (file.type && file.type.indexOf('video/') !== 0 && !/\.(mp4|m4v|mov|mkv|webm)$/i.test(file.name)) {
@@ -154,6 +281,7 @@
     }
 
     selectedFile = file
+    selectedNativeVideo = null
     lastWatchUrl = ''
     setProgress(0)
     el.fileName.innerHTML = escapeHtml(file.name)
@@ -173,6 +301,7 @@
 
   function resetFile() {
     selectedFile = null
+    selectedNativeVideo = null
     lastWatchUrl = ''
     if (selectedObjectUrl) URL.revokeObjectURL(selectedObjectUrl)
     selectedObjectUrl = ''
@@ -218,7 +347,7 @@
   }
 
   function uploadAndCreateShare() {
-    if (!selectedFile) {
+    if (!selectedFile && !selectedNativeVideo) {
       setStatus('error', '請先選擇影片。')
       return
     }
@@ -234,6 +363,11 @@
     el.shareButton.disabled = true
     setProgress(0)
     setStatus('busy', '正在上傳影片，請保持網路連線。')
+
+    if (selectedNativeVideo) {
+      uploadNativeVideoAndCreateShare()
+      return
+    }
 
     uploadFile(selectedFile, function (error, uploadResult) {
       if (error) {
@@ -262,6 +396,54 @@
         showShare(shareResult, publicUrl)
       })
     })
+  }
+
+  function uploadNativeVideoAndCreateShare() {
+    if (!hasNativeVideoBridge() || !selectedNativeVideo) {
+      el.uploadButton.disabled = false
+      setStatus('error', 'Android 原生影片上傳不可用。')
+      return
+    }
+
+    setStatus('busy', '正在由 Android 直接讀取並上傳車機影片，影片較大時請等待。')
+    window.setTimeout(function () {
+      var uploadResult = parseNativeResult(
+        window.ShenYueUpdater.uploadLocalVideo(
+          selectedNativeVideo.uri || '',
+          selectedNativeVideo.name || 'replay-video.mp4',
+          selectedNativeVideo.mimeType || 'video/mp4',
+          el.endpointInput.value,
+          el.modeInput.value,
+          el.tokenInput.value || ''
+        )
+      )
+
+      if (!uploadResult.ok) {
+        el.uploadButton.disabled = false
+        setStatus('error', '上傳失敗：' + escapeHtml(uploadResult.message || '未知錯誤'))
+        return
+      }
+
+      setProgress(100)
+      var publicUrl = uploadResult.publicUrl || uploadResult.shareUrl || uploadResult.url || ''
+      if (!publicUrl) {
+        el.uploadButton.disabled = false
+        setStatus('error', '上傳完成，但伺服器沒有回傳 publicUrl / shareUrl / url。')
+        return
+      }
+
+      setStatus('busy', '上傳完成，正在建立一次性觀看連結。')
+      createOneTimeLink(publicUrl, uploadResult, function (shareError, shareResult) {
+        el.uploadButton.disabled = false
+        if (shareError) {
+          setStatus('error', '一次性 QR 建立失敗：' + escapeHtml(shareError.message || shareError))
+          el.resultBox.innerHTML = '影片已上傳：<br>' + escapeHtml(publicUrl)
+          return
+        }
+
+        showShare(shareResult, publicUrl)
+      })
+    }, 80)
   }
 
   function uploadFile(file, done) {
@@ -298,13 +480,19 @@
 
     var body = JSON.stringify({
       videoUrl: publicUrl,
-      storageKey: uploadResult.storageKey || uploadResult.fileName || selectedFile.name,
-      fileName: uploadResult.fileName || selectedFile.name,
+      storageKey: uploadResult.storageKey || uploadResult.fileName || selectedVideoName(),
+      fileName: uploadResult.fileName || selectedVideoName(),
       ttlMinutes: 30,
       downloadEnabled: true,
     })
 
     request('POST', endpoint, body, headers, parseJsonDone(done))
+  }
+
+  function selectedVideoName() {
+    if (selectedNativeVideo && selectedNativeVideo.name) return selectedNativeVideo.name
+    if (selectedFile && selectedFile.name) return selectedFile.name
+    return 'replay-video.mp4'
   }
 
   function showShare(shareResult, publicUrl) {

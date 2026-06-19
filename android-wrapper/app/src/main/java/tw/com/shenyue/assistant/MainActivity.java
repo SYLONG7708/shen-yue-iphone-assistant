@@ -18,6 +18,9 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+
 public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST_CODE = 7708;
     private WebView webView;
@@ -68,14 +71,7 @@ public class MainActivity extends Activity {
                 }
                 MainActivity.this.filePathCallback = filePathCallback;
 
-                Intent intent;
-                try {
-                    intent = fileChooserParams.createIntent();
-                } catch (Exception error) {
-                    intent = new Intent(Intent.ACTION_GET_CONTENT);
-                    intent.addCategory(Intent.CATEGORY_OPENABLE);
-                    intent.setType("*/*");
-                }
+                Intent intent = buildCompatibleFileChooser(fileChooserParams);
 
                 try {
                     startActivityForResult(intent, FILE_CHOOSER_REQUEST_CODE);
@@ -129,6 +125,87 @@ public class MainActivity extends Activity {
         });
 
         loadHomePage();
+    }
+
+    private Intent buildCompatibleFileChooser(WebChromeClient.FileChooserParams fileChooserParams) {
+        String[] mimeTypes = normalizeAcceptTypes(fileChooserParams == null ? null : fileChooserParams.getAcceptTypes());
+        boolean allowMultiple = fileChooserParams != null
+                && fileChooserParams.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE;
+
+        Intent primary;
+        try {
+            primary = fileChooserParams == null ? null : fileChooserParams.createIntent();
+        } catch (Exception error) {
+            primary = null;
+        }
+        if (primary == null) {
+            primary = new Intent(Intent.ACTION_GET_CONTENT);
+        }
+        configureOpenableIntent(primary, mimeTypes, allowMultiple);
+
+        ArrayList<Intent> alternatives = new ArrayList<>();
+        Intent allFiles = new Intent(Intent.ACTION_GET_CONTENT);
+        configureOpenableIntent(allFiles, new String[] {"video/*", "*/*"}, allowMultiple);
+        alternatives.add(allFiles);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            Intent document = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            configureOpenableIntent(document, mimeTypes.length == 0 ? new String[] {"video/*", "*/*"} : mimeTypes, allowMultiple);
+            alternatives.add(document);
+        }
+
+        Intent video = new Intent(Intent.ACTION_GET_CONTENT);
+        configureOpenableIntent(video, new String[] {"video/*", "application/octet-stream", "*/*"}, allowMultiple);
+        alternatives.add(video);
+
+        Intent chooser = Intent.createChooser(primary, "選擇檔案");
+        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, alternatives.toArray(new Intent[0]));
+        return chooser;
+    }
+
+    private void configureOpenableIntent(Intent intent, String[] mimeTypes, boolean allowMultiple) {
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        if (mimeTypes != null && mimeTypes.length > 0) {
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
+        }
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, allowMultiple);
+    }
+
+    private String[] normalizeAcceptTypes(String[] acceptTypes) {
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        if (acceptTypes != null) {
+            for (String acceptType : acceptTypes) {
+                if (acceptType == null) continue;
+                String[] parts = acceptType.split(",");
+                for (String part : parts) {
+                    String value = part.trim().toLowerCase();
+                    if (value.length() == 0) continue;
+                    if (value.startsWith(".")) {
+                        if (".mp4".equals(value) || ".m4v".equals(value) || ".mov".equals(value)
+                                || ".mkv".equals(value) || ".webm".equals(value) || ".3gp".equals(value)) {
+                            values.add("video/*");
+                        } else if (".apk".equals(value)) {
+                            values.add("application/vnd.android.package-archive");
+                            values.add("application/octet-stream");
+                        } else if (".jpg".equals(value) || ".jpeg".equals(value) || ".png".equals(value)
+                                || ".webp".equals(value) || ".gif".equals(value)) {
+                            values.add("image/*");
+                        }
+                        continue;
+                    }
+                    values.add(value);
+                }
+            }
+        }
+
+        if (values.isEmpty()) {
+            values.add("*/*");
+        } else if (values.contains("video/*")) {
+            values.add("application/octet-stream");
+            values.add("*/*");
+        }
+        return values.toArray(new String[0]);
     }
 
     private boolean handleUrl(WebView view, String url) {

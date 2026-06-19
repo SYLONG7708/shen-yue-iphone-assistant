@@ -1,19 +1,25 @@
 package tw.com.shenyue.assistant;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
+import android.content.ContentUris;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
+import android.provider.OpenableColumns;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
@@ -31,8 +37,14 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.security.MessageDigest;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -41,6 +53,11 @@ public class UpdateBridge {
     static final String PREFS_NAME = "shen_yue_update_center";
     static final String LAST_INSTALL_STATUS = "last_install_status";
     static final String ACTION_INSTALL_COMMIT = "tw.com.shenyue.assistant.INSTALL_COMMIT";
+    private static final int VIDEO_PERMISSION_REQUEST_CODE = 7710;
+    private static final int LOCAL_VIDEO_SCAN_LIMIT = 120;
+    private static final String[] VIDEO_EXTENSIONS = {
+            ".mp4"
+    };
 
     private final Activity activity;
     private final PackageManager packageManager;
@@ -257,6 +274,124 @@ public class UpdateBridge {
     }
 
     @JavascriptInterface
+    public String getVideoAccessState() {
+        JSONObject result = new JSONObject();
+        try {
+            result.put("ok", true);
+            appendVideoAccessState(result);
+        } catch (Exception error) {
+            putError(result, error);
+        }
+        return result.toString();
+    }
+
+    @JavascriptInterface
+    public void requestVideoAccess() {
+        activity.runOnUiThread(() -> {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !hasVideoReadPermission()) {
+                activity.requestPermissions(new String[] { getVideoReadPermission() }, VIDEO_PERMISSION_REQUEST_CODE);
+                return;
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                intent.setData(Uri.parse("package:" + activity.getPackageName()));
+                try {
+                    activity.startActivity(intent);
+                } catch (ActivityNotFoundException error) {
+                    activity.startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+                }
+                return;
+            }
+
+            Toast.makeText(activity, "影片讀取權限已可用。", Toast.LENGTH_LONG).show();
+        });
+    }
+
+    @JavascriptInterface
+    public String listLocalVideos() {
+        JSONObject result = new JSONObject();
+        JSONArray items = new JSONArray();
+        Set<String> seen = new HashSet<>();
+        try {
+            appendVideoAccessState(result);
+            if (!hasVideoReadPermission() && !hasAllFilesAccess()) {
+                result.put("ok", false);
+                result.put("code", "NEED_VIDEO_PERMISSION");
+                result.put("message", "請先允許讀取影片；固定讀取 USB1/DCIM/CAMERA 與 USB2/DCIM/CAMERA 可能需要所有檔案存取。");
+                result.put("items", items);
+                return result.toString();
+            }
+
+            if (canScanRawExternalFiles()) {
+                scanUsbCameraVideoFiles(items, seen);
+            } else {
+                queryVideoStore(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, items, seen);
+                queryVideoStore(MediaStore.Video.Media.INTERNAL_CONTENT_URI, items, seen);
+            }
+
+            result.put("ok", true);
+            result.put("items", items);
+            result.put("count", items.length());
+            result.put("scanPaths", "USB1/DCIM/CAMERA, USB2/DCIM/CAMERA");
+        } catch (Exception error) {
+            putError(result, error);
+            try {
+                result.put("items", items);
+            } catch (JSONException ignored) {
+                // JSON error while reporting another error.
+            }
+        }
+        return result.toString();
+    }
+
+    @JavascriptInterface
+    public String uploadLocalVideo(String source, String fileName, String mimeType, String endpoint, String mode, String token) {
+        JSONObject result = new JSONObject();
+        VideoInput video = null;
+        try {
+            String safeSource = source == null ? "" : source.trim();
+            String safeEndpoint = endpoint == null ? "" : endpoint.trim();
+            if (safeSource.length() == 0) {
+                result.put("ok", false);
+                result.put("message", "沒有選擇本機影片。");
+                return result.toString();
+            }
+            if (safeEndpoint.length() == 0) {
+                result.put("ok", false);
+                result.put("message", "沒有設定上傳 API。");
+                return result.toString();
+            }
+
+            video = openVideoInput(safeSource, fileName, mimeType);
+            String uploadUrl = resolveUploadEndpoint(safeEndpoint, video.fileName);
+            String responseText;
+            if ("POST".equalsIgnoreCase(mode)) {
+                responseText = uploadMultipart(uploadUrl, video, token);
+            } else {
+                responseText = uploadBinary(uploadUrl, video, token);
+            }
+
+            result = parseUploadResponse(responseText);
+            result.put("ok", true);
+            result.put("fileName", video.fileName);
+            result.put("size", video.size);
+            result.put("mimeType", video.mimeType);
+        } catch (Exception error) {
+            putError(result, error);
+        } finally {
+            if (video != null) {
+                try {
+                    video.input.close();
+                } catch (Exception ignored) {
+                    // Closing best effort.
+                }
+            }
+        }
+        return result.toString();
+    }
+
+    @JavascriptInterface
     public String inspectLastSelectedApk(String fileName) {
         JSONObject result = new JSONObject();
         try {
@@ -272,6 +407,438 @@ public class UpdateBridge {
             putError(result, error);
             return result.toString();
         }
+    }
+
+    private void appendVideoAccessState(JSONObject result) throws JSONException {
+        result.put("sdk", Build.VERSION.SDK_INT);
+        result.put("readVideoGranted", hasVideoReadPermission());
+        result.put("allFilesGranted", hasAllFilesAccess());
+        result.put("targetSdk", getSelfTargetSdk());
+        result.put("rawScanEnabled", canScanRawExternalFiles());
+        result.put("readPermission", getVideoReadPermission());
+        result.put("nativeVideoBridge", true);
+    }
+
+    private boolean hasVideoReadPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true;
+        return activity.checkSelfPermission(getVideoReadPermission()) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean hasAllFilesAccess() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager();
+    }
+
+    private boolean canScanRawExternalFiles() {
+        return hasAllFilesAccess()
+                || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+                || (getSelfTargetSdk() <= 28 && hasVideoReadPermission());
+    }
+
+    private String getVideoReadPermission() {
+        if (Build.VERSION.SDK_INT >= 33 && getSelfTargetSdk() >= 33) {
+            return Manifest.permission.READ_MEDIA_VIDEO;
+        }
+        return Manifest.permission.READ_EXTERNAL_STORAGE;
+    }
+
+    private int getSelfTargetSdk() {
+        try {
+            ApplicationInfo appInfo = packageManager.getApplicationInfo(activity.getPackageName(), 0);
+            return appInfo.targetSdkVersion;
+        } catch (Exception ignored) {
+            return Build.VERSION.SDK_INT;
+        }
+    }
+
+    private void queryVideoStore(Uri storeUri, JSONArray items, Set<String> seen) {
+        if (items.length() >= LOCAL_VIDEO_SCAN_LIMIT) return;
+
+        List<String> columns = new ArrayList<>();
+        columns.add(MediaStore.Video.Media._ID);
+        columns.add(MediaStore.Video.Media.DISPLAY_NAME);
+        columns.add(MediaStore.Video.Media.SIZE);
+        columns.add(MediaStore.Video.Media.DATE_MODIFIED);
+        columns.add(MediaStore.Video.Media.MIME_TYPE);
+        columns.add(MediaStore.Video.Media.DURATION);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            columns.add(MediaStore.Video.Media.RELATIVE_PATH);
+        } else {
+            columns.add(MediaStore.Video.Media.DATA);
+        }
+
+        try (Cursor cursor = activity.getContentResolver().query(
+                storeUri,
+                columns.toArray(new String[0]),
+                null,
+                null,
+                MediaStore.Video.Media.DATE_MODIFIED + " DESC"
+        )) {
+            if (cursor == null) return;
+            while (cursor.moveToNext() && items.length() < LOCAL_VIDEO_SCAN_LIMIT) {
+                long id = getCursorLong(cursor, MediaStore.Video.Media._ID, 0L);
+                Uri uri = ContentUris.withAppendedId(storeUri, id);
+                String uriValue = uri.toString();
+                if (!seen.add(uriValue)) continue;
+
+                JSONObject item = new JSONObject();
+                String name = getCursorString(cursor, MediaStore.Video.Media.DISPLAY_NAME, "video-" + id + ".mp4");
+                String relativePath = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                        ? getCursorString(cursor, MediaStore.Video.Media.RELATIVE_PATH, "")
+                        : getCursorString(cursor, MediaStore.Video.Media.DATA, "");
+                String pathForFilter = relativePath + " " + uriValue;
+                if (!isUsbCameraPath(pathForFilter) || !isLikelyVideoName(name)) continue;
+                item.put("id", "media-" + id);
+                item.put("uri", uriValue);
+                item.put("name", name);
+                item.put("size", getCursorLong(cursor, MediaStore.Video.Media.SIZE, 0L));
+                item.put("modified", getCursorLong(cursor, MediaStore.Video.Media.DATE_MODIFIED, 0L) * 1000L);
+                item.put("duration", getCursorLong(cursor, MediaStore.Video.Media.DURATION, 0L));
+                item.put("mimeType", getCursorString(cursor, MediaStore.Video.Media.MIME_TYPE, guessVideoMime(name)));
+                item.put("path", relativePath);
+                item.put("source", describeUsbCameraSource(pathForFilter));
+                items.put(item);
+            }
+        } catch (Exception ignored) {
+            // Some car firmwares expose broken MediaStore providers; direct folder scan remains a fallback.
+        }
+    }
+
+    private void scanUsbCameraVideoFiles(JSONArray items, Set<String> seen) {
+        List<File> roots = new ArrayList<>();
+        addKnownUsbCameraRoots(roots);
+        discoverUsbCameraRoots(roots);
+
+        for (File root : roots) {
+            if (items.length() >= LOCAL_VIDEO_SCAN_LIMIT) return;
+            scanRoot(root, items, seen);
+        }
+    }
+
+    private void addKnownUsbCameraRoots(List<File> roots) {
+        String[] parents = {
+                "/storage",
+                "/mnt/media_rw",
+                "/storage/usb_storage",
+                "/mnt/usb_storage",
+                "/mnt",
+                "/mnt/media_rw/usb_storage"
+        };
+        String[] volumes = { "USB1", "USB2", "usb1", "usb2", "Usb1", "Usb2" };
+        for (String parent : parents) {
+            for (String volume : volumes) {
+                addUsbCameraRoot(roots, new File(parent, volume));
+            }
+        }
+    }
+
+    private void discoverUsbCameraRoots(List<File> roots) {
+        File[] parents = {
+                new File("/storage"),
+                new File("/mnt/media_rw"),
+                new File("/storage/usb_storage"),
+                new File("/mnt/usb_storage"),
+                new File("/mnt")
+        };
+        for (File parent : parents) {
+            File[] children;
+            try {
+                children = parent.listFiles();
+            } catch (Exception error) {
+                continue;
+            }
+            if (children == null) continue;
+            for (File child : children) {
+                if (child.isDirectory() && isUsbSlotName(child.getName())) {
+                    addUsbCameraRoot(roots, child);
+                }
+            }
+        }
+    }
+
+    private void addUsbCameraRoot(List<File> roots, File volumeRoot) {
+        addRoot(roots, new File(new File(volumeRoot, "DCIM"), "CAMERA"));
+        addRoot(roots, new File(new File(volumeRoot, "DCIM"), "Camera"));
+        addRoot(roots, new File(new File(volumeRoot, "DCIM"), "camera"));
+    }
+
+    private void addRoot(List<File> roots, File root) {
+        if (root != null && root.exists() && root.canRead()) {
+            String rootPath;
+            try {
+                rootPath = root.getCanonicalPath();
+            } catch (Exception error) {
+                rootPath = root.getAbsolutePath();
+            }
+            for (File existing : roots) {
+                try {
+                    if (existing.getCanonicalPath().equals(rootPath)) return;
+                } catch (Exception ignored) {
+                    if (existing.getAbsolutePath().equals(root.getAbsolutePath())) return;
+                }
+            }
+            roots.add(root);
+        }
+    }
+
+    private void scanRoot(File root, JSONArray items, Set<String> seen) {
+        ArrayDeque<FileDepth> queue = new ArrayDeque<>();
+        queue.add(new FileDepth(root, 0));
+        while (!queue.isEmpty() && items.length() < LOCAL_VIDEO_SCAN_LIMIT) {
+            FileDepth current = queue.removeFirst();
+            File[] children;
+            try {
+                children = current.file.listFiles();
+            } catch (Exception error) {
+                continue;
+            }
+            if (children == null) continue;
+
+            for (File child : children) {
+                if (items.length() >= LOCAL_VIDEO_SCAN_LIMIT) return;
+                if (child.isDirectory()) {
+                    if (current.depth < 2) {
+                        queue.add(new FileDepth(child, current.depth + 1));
+                    }
+                } else if (isLikelyVideoFile(child)) {
+                    String uri = Uri.fromFile(child).toString();
+                    if (!seen.add(uri)) continue;
+                    try {
+                        JSONObject item = new JSONObject();
+                        item.put("id", "file-" + Math.abs(child.getAbsolutePath().hashCode()));
+                        item.put("uri", uri);
+                        item.put("name", child.getName());
+                        item.put("size", child.length());
+                        item.put("modified", child.lastModified());
+                        item.put("duration", 0);
+                        item.put("mimeType", guessVideoMime(child.getName()));
+                        item.put("path", child.getParent());
+                        item.put("source", describeUsbCameraSource(child.getAbsolutePath()));
+                        items.put(item);
+                    } catch (JSONException ignored) {
+                        // Skip malformed row only.
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean isUsbSlotName(String name) {
+        String value = name == null ? "" : name.toLowerCase(Locale.US);
+        return "usb1".equals(value) || "usb2".equals(value);
+    }
+
+    private boolean isUsbCameraPath(String path) {
+        String value = normalizePath(path);
+        return (value.contains("/usb1/") || value.contains("/usb2/"))
+                && value.contains("/dcim/camera");
+    }
+
+    private String describeUsbCameraSource(String path) {
+        String value = normalizePath(path);
+        if (value.contains("/usb2/")) return "USB2/DCIM/CAMERA";
+        return "USB1/DCIM/CAMERA";
+    }
+
+    private String normalizePath(String path) {
+        return "/" + (path == null ? "" : path)
+                .replace('\\', '/')
+                .replaceAll("/+", "/")
+                .toLowerCase(Locale.US);
+    }
+
+    private boolean isLikelyVideoName(String fileName) {
+        String name = fileName == null ? "" : fileName.toLowerCase(Locale.US);
+        for (String extension : VIDEO_EXTENSIONS) {
+            if (name.endsWith(extension)) return true;
+        }
+        return false;
+    }
+
+    private boolean isLikelyVideoFile(File file) {
+        if (file == null || !file.isFile() || file.length() <= 0L) return false;
+        return isLikelyVideoName(file.getName());
+    }
+
+    private VideoInput openVideoInput(String source, String fileName, String mimeType) throws Exception {
+        Uri uri = source.startsWith("/") ? null : Uri.parse(source);
+        String name = fileName == null || fileName.trim().length() == 0 ? "" : fileName.trim();
+        String type = mimeType == null || mimeType.trim().length() == 0 ? "" : mimeType.trim();
+
+        if (uri != null && "content".equalsIgnoreCase(uri.getScheme())) {
+            long size = resolveContentSize(uri);
+            if (name.length() == 0) name = resolveContentName(uri);
+            if (name.length() == 0) name = "replay-video.mp4";
+            if (type.length() == 0) type = guessVideoMime(name);
+            InputStream input = activity.getContentResolver().openInputStream(uri);
+            if (input == null) throw new IllegalStateException("無法讀取本機影片。");
+            return new VideoInput(input, name, type, size);
+        }
+
+        File file;
+        if (uri != null && "file".equalsIgnoreCase(uri.getScheme())) {
+            file = new File(uri.getPath());
+        } else {
+            file = new File(source);
+        }
+        if (!file.exists() || !file.isFile()) {
+            throw new IllegalStateException("找不到本機影片檔案。");
+        }
+        if (name.length() == 0) name = file.getName();
+        if (type.length() == 0) type = guessVideoMime(name);
+        return new VideoInput(new FileInputStream(file), name, type, file.length());
+    }
+
+    private long resolveContentSize(Uri uri) {
+        try (Cursor cursor = activity.getContentResolver().query(
+                uri,
+                new String[] { OpenableColumns.SIZE },
+                null,
+                null,
+                null
+        )) {
+            if (cursor != null && cursor.moveToFirst()) {
+                return getCursorLong(cursor, OpenableColumns.SIZE, -1L);
+            }
+        } catch (Exception ignored) {
+            // Unknown size is acceptable for chunked upload.
+        }
+        return -1L;
+    }
+
+    private String resolveContentName(Uri uri) {
+        try (Cursor cursor = activity.getContentResolver().query(
+                uri,
+                new String[] { OpenableColumns.DISPLAY_NAME },
+                null,
+                null,
+                null
+        )) {
+            if (cursor != null && cursor.moveToFirst()) {
+                return getCursorString(cursor, OpenableColumns.DISPLAY_NAME, "");
+            }
+        } catch (Exception ignored) {
+            // Fallback below.
+        }
+        return "";
+    }
+
+    private String uploadBinary(String uploadUrl, VideoInput video, String token) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(uploadUrl).openConnection();
+        connection.setRequestMethod("PUT");
+        connection.setDoOutput(true);
+        connection.setConnectTimeout(15000);
+        connection.setReadTimeout(120000);
+        connection.setRequestProperty("Content-Type", video.mimeType);
+        applyAuth(connection, token);
+        if (video.size >= 0L) {
+            connection.setFixedLengthStreamingMode(video.size);
+        } else {
+            connection.setChunkedStreamingMode(64 * 1024);
+        }
+        try (OutputStream output = connection.getOutputStream()) {
+            copyStream(video.input, output);
+        }
+        return readHttpResponse(connection);
+    }
+
+    private String uploadMultipart(String uploadUrl, VideoInput video, String token) throws Exception {
+        String boundary = "ShenYueBoundary" + System.currentTimeMillis();
+        HttpURLConnection connection = (HttpURLConnection) new URL(uploadUrl).openConnection();
+        connection.setRequestMethod("POST");
+        connection.setDoOutput(true);
+        connection.setConnectTimeout(15000);
+        connection.setReadTimeout(120000);
+        connection.setChunkedStreamingMode(64 * 1024);
+        connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+        applyAuth(connection, token);
+        try (OutputStream output = connection.getOutputStream()) {
+            String head = "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"file\"; filename=\"" + video.fileName.replace("\"", "_") + "\"\r\n"
+                    + "Content-Type: " + video.mimeType + "\r\n\r\n";
+            output.write(head.getBytes("UTF-8"));
+            copyStream(video.input, output);
+            output.write(("\r\n--" + boundary + "--\r\n").getBytes("UTF-8"));
+        }
+        return readHttpResponse(connection);
+    }
+
+    private void applyAuth(HttpURLConnection connection, String token) {
+        String safeToken = token == null ? "" : token.trim();
+        if (safeToken.length() > 0) {
+            connection.setRequestProperty("Authorization", "Bearer " + safeToken);
+        }
+    }
+
+    private String readHttpResponse(HttpURLConnection connection) throws Exception {
+        int code = connection.getResponseCode();
+        InputStream input = code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream();
+        String body = "";
+        if (input != null) {
+            try (InputStream response = input; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                copyStream(response, output);
+                body = output.toString("UTF-8");
+            }
+        }
+        connection.disconnect();
+        if (code < 200 || code >= 300) {
+            throw new IllegalStateException("上傳失敗，HTTP " + code + " " + body);
+        }
+        return body;
+    }
+
+    private JSONObject parseUploadResponse(String responseText) throws JSONException {
+        String body = responseText == null ? "" : responseText.trim();
+        if (body.startsWith("{")) {
+            JSONObject object = new JSONObject(body);
+            if (!object.has("ok")) object.put("ok", true);
+            return object;
+        }
+
+        JSONObject object = new JSONObject();
+        object.put("ok", true);
+        object.put("responseText", body);
+        if (body.startsWith("http://") || body.startsWith("https://")) {
+            object.put("publicUrl", body);
+        }
+        return object;
+    }
+
+    private void copyStream(InputStream input, OutputStream output) throws Exception {
+        byte[] buffer = new byte[64 * 1024];
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            output.write(buffer, 0, read);
+        }
+    }
+
+    private String resolveUploadEndpoint(String endpoint, String fileName) throws Exception {
+        String encoded = URLEncoder.encode(fileName == null ? "replay-video.mp4" : fileName, "UTF-8").replace("+", "%20");
+        return endpoint.replace("{filename}", encoded);
+    }
+
+    private String guessVideoMime(String fileName) {
+        String value = fileName == null ? "" : fileName.toLowerCase(Locale.US);
+        if (value.endsWith(".mov")) return "video/quicktime";
+        if (value.endsWith(".webm")) return "video/webm";
+        if (value.endsWith(".mkv")) return "video/x-matroska";
+        if (value.endsWith(".avi")) return "video/x-msvideo";
+        if (value.endsWith(".ts")) return "video/mp2t";
+        if (value.endsWith(".3gp")) return "video/3gpp";
+        if (value.endsWith(".3g2")) return "video/3gpp2";
+        return "video/mp4";
+    }
+
+    private String getCursorString(Cursor cursor, String column, String fallback) {
+        int index = cursor.getColumnIndex(column);
+        if (index < 0 || cursor.isNull(index)) return fallback;
+        String value = cursor.getString(index);
+        return value == null || value.length() == 0 ? fallback : value;
+    }
+
+    private long getCursorLong(Cursor cursor, String column, long fallback) {
+        int index = cursor.getColumnIndex(column);
+        if (index < 0 || cursor.isNull(index)) return fallback;
+        return cursor.getLong(index);
     }
 
     private File copySelectedApkToCache(Uri uri, String fileName) throws Exception {
@@ -555,6 +1122,30 @@ public class UpdateBridge {
             object.put("message", error.getMessage() == null ? error.toString() : error.getMessage());
         } catch (JSONException ignored) {
             // JSON error while reporting another error.
+        }
+    }
+
+    private static class VideoInput {
+        final InputStream input;
+        final String fileName;
+        final String mimeType;
+        final long size;
+
+        VideoInput(InputStream input, String fileName, String mimeType, long size) {
+            this.input = input;
+            this.fileName = fileName;
+            this.mimeType = mimeType;
+            this.size = size;
+        }
+    }
+
+    private static class FileDepth {
+        final File file;
+        final int depth;
+
+        FileDepth(File file, int depth) {
+            this.file = file;
+            this.depth = depth;
         }
     }
 

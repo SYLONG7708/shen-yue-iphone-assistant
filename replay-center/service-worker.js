@@ -1,4 +1,4 @@
-const CACHE_NAME = 'replay-center-v1'
+const CACHE_NAME = 'replay-center-v3-usb-camera-mp4'
 const STATIC_ASSETS = ['/', '/remote-config.json', '/manifest.webmanifest', '/favicon.svg']
 
 self.addEventListener('install', (event) => {
