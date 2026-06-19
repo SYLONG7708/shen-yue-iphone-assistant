@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v237-replay-auto-qr";
+const cacheName = "shen-yue-assistant-v238-replay-fast-progress";
 const assets = [
   "./",
   "./index.html",

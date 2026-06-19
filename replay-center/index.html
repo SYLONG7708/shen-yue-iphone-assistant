@@ -300,6 +300,25 @@
         margin-top: 12px;
       }
 
+      .progress-line {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 58px;
+        gap: 10px;
+        align-items: center;
+        margin-top: 12px;
+      }
+
+      .progress-line .progress {
+        margin-top: 0;
+      }
+
+      .progress-percent {
+        color: #cfe0d9;
+        font-variant-numeric: tabular-nums;
+        font-weight: 900;
+        text-align: right;
+      }
+
       .progress span {
         display: block;
         width: 0%;
@@ -502,7 +521,10 @@
               </div>
               <div class="native-video-list" id="nativeVideoList"></div>
             </div>
-            <div class="progress" id="progressWrap"><span id="progressBar"></span></div>
+            <div class="progress-line">
+              <div class="progress" id="progressWrap"><span id="progressBar"></span></div>
+              <strong class="progress-percent" id="progressText">0%</strong>
+            </div>
             <div class="actions">
               <button class="primary" id="uploadButton" type="button" disabled>上傳並產生 QR</button>
               <button id="shareButton" type="button" disabled>分享通訊APP</button>

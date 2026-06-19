@@ -60,6 +60,8 @@ public class UpdateBridge {
     static final String ACTION_INSTALL_COMMIT = "tw.com.shenyue.assistant.INSTALL_COMMIT";
     private static final int VIDEO_PERMISSION_REQUEST_CODE = 7710;
     private static final int LOCAL_VIDEO_SCAN_LIMIT = 120;
+    private static final int FAST_UPLOAD_BUFFER_SIZE = 256 * 1024;
+    private static final long UPLOAD_PROGRESS_INTERVAL_MS = 180L;
     private static final String[] VIDEO_EXTENSIONS = {
             ".mp4", ".ts", ".mts", ".m2ts"
     };
@@ -69,6 +71,7 @@ public class UpdateBridge {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ConcurrentHashMap<String, UpdateTask> tasks = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, VideoPrepareTask> videoPrepareTasks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, VideoUploadTask> videoUploadTasks = new ConcurrentHashMap<>();
     private volatile Uri lastSelectedFileUri;
 
     UpdateBridge(Activity activity) {
@@ -424,6 +427,54 @@ public class UpdateBridge {
         return uploadLocalVideoInternal(source, fileName, mimeType, endpoint, mode, token, false);
     }
 
+    @JavascriptInterface
+    public String uploadLocalVideoAsync(String source, String fileName, String mimeType, String endpoint, String mode, String token) {
+        return uploadLocalVideoAsyncInternal(source, fileName, mimeType, endpoint, mode, token, true);
+    }
+
+    @JavascriptInterface
+    public String uploadLocalVideoOriginalAsync(String source, String fileName, String mimeType, String endpoint, String mode, String token) {
+        return uploadLocalVideoAsyncInternal(source, fileName, mimeType, endpoint, mode, token, false);
+    }
+
+    @JavascriptInterface
+    public String getLocalVideoUploadStatus(String taskId) {
+        VideoUploadTask task = videoUploadTasks.get(taskId == null ? "" : taskId);
+        if (task == null) {
+            return "{\"ok\":false,\"message\":\"Video upload task was not found.\"}";
+        }
+        return task.toJson().toString();
+    }
+
+    private String uploadLocalVideoAsyncInternal(String source, String fileName, String mimeType, String endpoint, String mode, String token, boolean remuxTransportStreams) {
+        JSONObject result = new JSONObject();
+        try {
+            String safeSource = source == null ? "" : source.trim();
+            String safeEndpoint = endpoint == null ? "" : endpoint.trim();
+            if (safeSource.length() == 0) {
+                result.put("ok", false);
+                result.put("message", "沒有選擇本機影片。");
+                return result.toString();
+            }
+            if (safeEndpoint.length() == 0) {
+                result.put("ok", false);
+                result.put("message", "沒有設定上傳 API。");
+                return result.toString();
+            }
+
+            String id = "upload-" + System.currentTimeMillis();
+            VideoUploadTask task = new VideoUploadTask(id);
+            task.fileName = fileName == null ? "" : fileName;
+            task.mimeType = mimeType == null ? "" : mimeType;
+            videoUploadTasks.put(id, task);
+            executor.execute(() -> runUploadLocalVideo(task, safeSource, fileName, mimeType, safeEndpoint, mode, token, remuxTransportStreams));
+            return task.toJson().toString();
+        } catch (Exception error) {
+            putError(result, error);
+            return result.toString();
+        }
+    }
+
     private String uploadLocalVideoInternal(String source, String fileName, String mimeType, String endpoint, String mode, String token, boolean remuxTransportStreams) {
         JSONObject result = new JSONObject();
         VideoInput video = null;
@@ -442,14 +493,7 @@ public class UpdateBridge {
             }
 
             video = openVideoInput(safeSource, fileName, mimeType, remuxTransportStreams);
-            String uploadUrl = resolveUploadEndpoint(safeEndpoint, video.fileName);
-            String responseText;
-            if ("POST".equalsIgnoreCase(mode)) {
-                responseText = uploadMultipart(uploadUrl, video, token);
-            } else {
-                responseText = uploadBinary(uploadUrl, video, token);
-            }
-
+            String responseText = uploadVideoToEndpoint(video, safeEndpoint, mode, token, null);
             result = parseUploadResponse(responseText);
             result.put("ok", true);
             result.put("fileName", video.fileName);
@@ -467,6 +511,37 @@ public class UpdateBridge {
             }
         }
         return result.toString();
+    }
+
+    private void runUploadLocalVideo(VideoUploadTask task, String source, String fileName, String mimeType, String endpoint, String mode, String token, boolean remuxTransportStreams) {
+        VideoInput video = null;
+        try {
+            task.status = "running";
+            task.progress = 1;
+            task.message = "讀取影片 1%";
+            video = openVideoInput(source, fileName, mimeType, remuxTransportStreams);
+            task.fileName = video.fileName;
+            task.mimeType = video.mimeType;
+            task.size = video.size;
+
+            task.progress = Math.max(task.progress, 2);
+            task.message = "開始上傳 2%";
+            String responseText = uploadVideoToEndpoint(video, endpoint, mode, token, task);
+            task.progress = Math.max(task.progress, 98);
+            task.message = "處理伺服器回應 98%";
+            JSONObject uploadResult = parseUploadResponse(responseText);
+            task.complete(uploadResult, video);
+        } catch (Exception error) {
+            task.fail(safeMessage(error));
+        } finally {
+            if (video != null) {
+                try {
+                    video.input.close();
+                } catch (Exception ignored) {
+                    // Closing best effort.
+                }
+            }
+        }
     }
 
     @JavascriptInterface
@@ -1169,42 +1244,67 @@ public class UpdateBridge {
         return "";
     }
 
+    private String uploadVideoToEndpoint(VideoInput video, String endpoint, String mode, String token, VideoUploadTask task) throws Exception {
+        String uploadUrl = resolveUploadEndpoint(endpoint, video.fileName);
+        if ("POST".equalsIgnoreCase(mode)) {
+            return uploadMultipart(uploadUrl, video, token, task);
+        }
+        return uploadBinary(uploadUrl, video, token, task);
+    }
+
     private String uploadBinary(String uploadUrl, VideoInput video, String token) throws Exception {
+        return uploadBinary(uploadUrl, video, token, null);
+    }
+
+    private String uploadBinary(String uploadUrl, VideoInput video, String token, VideoUploadTask task) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(uploadUrl).openConnection();
         connection.setRequestMethod("PUT");
         connection.setDoOutput(true);
         connection.setConnectTimeout(15000);
-        connection.setReadTimeout(120000);
+        connection.setReadTimeout(180000);
+        connection.setUseCaches(false);
         connection.setRequestProperty("Content-Type", video.mimeType);
+        connection.setRequestProperty("Connection", "Keep-Alive");
         applyAuth(connection, token);
         if (video.size >= 0L) {
             connection.setFixedLengthStreamingMode(video.size);
         } else {
-            connection.setChunkedStreamingMode(64 * 1024);
+            connection.setChunkedStreamingMode(FAST_UPLOAD_BUFFER_SIZE);
         }
         try (OutputStream output = connection.getOutputStream()) {
-            copyStream(video.input, output);
+            copyUploadStream(video.input, output, task, video.size);
         }
         return readHttpResponse(connection);
     }
 
     private String uploadMultipart(String uploadUrl, VideoInput video, String token) throws Exception {
+        return uploadMultipart(uploadUrl, video, token, null);
+    }
+
+    private String uploadMultipart(String uploadUrl, VideoInput video, String token, VideoUploadTask task) throws Exception {
         String boundary = "ShenYueBoundary" + System.currentTimeMillis();
         HttpURLConnection connection = (HttpURLConnection) new URL(uploadUrl).openConnection();
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
         connection.setConnectTimeout(15000);
-        connection.setReadTimeout(120000);
-        connection.setChunkedStreamingMode(64 * 1024);
+        connection.setReadTimeout(180000);
+        connection.setUseCaches(false);
+        connection.setRequestProperty("Connection", "Keep-Alive");
+        byte[] headBytes = ("--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"file\"; filename=\"" + video.fileName.replace("\"", "_") + "\"\r\n"
+                + "Content-Type: " + video.mimeType + "\r\n\r\n").getBytes("UTF-8");
+        byte[] tailBytes = ("\r\n--" + boundary + "--\r\n").getBytes("UTF-8");
+        if (video.size >= 0L) {
+            connection.setFixedLengthStreamingMode(headBytes.length + video.size + tailBytes.length);
+        } else {
+            connection.setChunkedStreamingMode(FAST_UPLOAD_BUFFER_SIZE);
+        }
         connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
         applyAuth(connection, token);
         try (OutputStream output = connection.getOutputStream()) {
-            String head = "--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"file\"; filename=\"" + video.fileName.replace("\"", "_") + "\"\r\n"
-                    + "Content-Type: " + video.mimeType + "\r\n\r\n";
-            output.write(head.getBytes("UTF-8"));
-            copyStream(video.input, output);
-            output.write(("\r\n--" + boundary + "--\r\n").getBytes("UTF-8"));
+            output.write(headBytes);
+            copyUploadStream(video.input, output, task, video.size);
+            output.write(tailBytes);
         }
         return readHttpResponse(connection);
     }
@@ -1255,6 +1355,36 @@ public class UpdateBridge {
         int read;
         while ((read = input.read(buffer)) != -1) {
             output.write(buffer, 0, read);
+        }
+    }
+
+    private void copyUploadStream(InputStream input, OutputStream output, VideoUploadTask task, long totalSize) throws Exception {
+        byte[] buffer = new byte[FAST_UPLOAD_BUFFER_SIZE];
+        int read;
+        long total = 0L;
+        long lastUpdate = 0L;
+        while ((read = input.read(buffer)) != -1) {
+            output.write(buffer, 0, read);
+            total += read;
+            if (task != null) {
+                long now = System.currentTimeMillis();
+                if (now - lastUpdate >= UPLOAD_PROGRESS_INTERVAL_MS || (totalSize > 0L && total >= totalSize)) {
+                    int progress;
+                    if (totalSize > 0L) {
+                        progress = Math.min(96, Math.max(3, 3 + (int) ((total * 93L) / totalSize)));
+                    } else {
+                        progress = Math.min(95, Math.max(task.progress + 1, 3));
+                    }
+                    task.progress = Math.max(task.progress, progress);
+                    task.message = String.format(Locale.TAIWAN, "上傳中 %d%%", task.progress);
+                    lastUpdate = now;
+                }
+            }
+        }
+        output.flush();
+        if (task != null) {
+            task.progress = Math.max(task.progress, 97);
+            task.message = "上傳完成，等待伺服器回應 97%";
         }
     }
 
@@ -1618,6 +1748,67 @@ public class UpdateBridge {
                 object.put("mimeType", mimeType);
                 object.put("size", size);
                 object.put("converted", converted);
+            } catch (JSONException ignored) {
+                // In-memory values are simple strings and numbers.
+            }
+            return object;
+        }
+    }
+
+    private static class VideoUploadTask {
+        final String id;
+        volatile String status = "queued";
+        volatile int progress = 0;
+        volatile String message = "等待上傳 0%";
+        volatile String fileName = "";
+        volatile String mimeType = "";
+        volatile long size = 0L;
+        volatile String publicUrl = "";
+        volatile String shareUrl = "";
+        volatile String url = "";
+        volatile String storageKey = "";
+        volatile String responseText = "";
+
+        VideoUploadTask(String id) {
+            this.id = id;
+        }
+
+        void complete(JSONObject uploadResult, VideoInput video) {
+            status = "done";
+            progress = 100;
+            message = "上傳完成 100%";
+            fileName = uploadResult.optString("fileName", video.fileName);
+            mimeType = uploadResult.optString("mimeType", video.mimeType);
+            size = uploadResult.optLong("size", video.size);
+            publicUrl = uploadResult.optString("publicUrl", "");
+            shareUrl = uploadResult.optString("shareUrl", "");
+            url = uploadResult.optString("url", "");
+            storageKey = uploadResult.optString("storageKey", "");
+            responseText = uploadResult.optString("responseText", "");
+        }
+
+        void fail(String errorMessage) {
+            status = "failed";
+            progress = Math.max(progress, 0);
+            message = errorMessage == null || errorMessage.length() == 0 ? "上傳失敗" : errorMessage;
+        }
+
+        JSONObject toJson() {
+            JSONObject object = new JSONObject();
+            try {
+                object.put("ok", true);
+                object.put("taskId", id);
+                object.put("status", status);
+                object.put("progress", progress);
+                object.put("message", message);
+                object.put("fileName", fileName);
+                object.put("mimeType", mimeType);
+                object.put("size", size);
+                if (publicUrl.length() > 0) object.put("publicUrl", publicUrl);
+                if (shareUrl.length() > 0) object.put("shareUrl", shareUrl);
+                if (url.length() > 0) object.put("url", url);
+                if (storageKey.length() > 0) object.put("storageKey", storageKey);
+                if (responseText.length() > 0) object.put("responseText", responseText);
             } catch (JSONException ignored) {
                 // In-memory values are simple strings and numbers.
             }
