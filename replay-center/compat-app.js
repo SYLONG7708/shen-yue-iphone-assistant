@@ -176,6 +176,31 @@
     }
   }
 
+  function canPrepareNativeVideo() {
+    return Boolean(
+      window.ShenYueUpdater &&
+        typeof window.ShenYueUpdater.prepareLocalVideo === 'function'
+    )
+  }
+
+  function isTransportStreamVideo(item) {
+    if (!item) return false
+    return /\.(ts|mts|m2ts)$/i.test(item.name || '') || /video\/(mp2t|mpeg|mpeg2)/i.test(item.mimeType || '')
+  }
+
+  function showNativePreview(uri) {
+    if (!uri) return
+    el.previewVideo.src = uri
+    el.previewVideo.className = ''
+    el.emptyPreview.className = 'hidden'
+  }
+
+  function hideNativePreview() {
+    el.previewVideo.removeAttribute('src')
+    el.previewVideo.className = 'hidden'
+    el.emptyPreview.className = 'empty-preview'
+  }
+
   function refreshNativeAccessState() {
     if (!hasNativeVideoBridge() || typeof window.ShenYueUpdater.getVideoAccessState !== 'function') return
     var state = parseNativeResult(window.ShenYueUpdater.getVideoAccessState())
@@ -269,11 +294,56 @@
     if (selectedObjectUrl) URL.revokeObjectURL(selectedObjectUrl)
     selectedObjectUrl = ''
     if (item.uri) {
-      el.previewVideo.src = item.uri
-      el.previewVideo.className = ''
-      el.emptyPreview.className = 'hidden'
+      if (isTransportStreamVideo(item) && canPrepareNativeVideo()) {
+        hideNativePreview()
+        setStatus('busy', '正在準備 TS 影片為 MP4，完成後可預覽並產生可播放 QR。')
+        window.setTimeout(function () {
+          prepareSelectedNativeVideo(item)
+        }, 60)
+        return
+      }
+      showNativePreview(item.uri)
     }
     setStatus('ready', '已選擇車機影片：' + escapeHtml(item.name || 'replay-video.mp4'))
+  }
+
+  function prepareSelectedNativeVideo(item) {
+    if (!selectedNativeVideo || selectedNativeVideo.uri !== item.uri) return
+    var prepared = parseNativeResult(
+      window.ShenYueUpdater.prepareLocalVideo(
+        item.uri || '',
+        item.name || 'replay-video.mp4',
+        item.mimeType || 'video/mp4'
+      )
+    )
+    if (!selectedNativeVideo || selectedNativeVideo.uri !== item.uri) return
+
+    if (!prepared.ok || !prepared.uri) {
+      el.resultBox.innerHTML = 'TS 影片轉成 MP4 失敗，手機瀏覽器可能無法直接播放原始 TS。'
+      if (item.uri) showNativePreview(item.uri)
+      setStatus('error', 'TS 轉 MP4 失敗：' + escapeHtml(prepared.message || '未知錯誤'))
+      return
+    }
+
+    selectedNativeVideo.previewUri = prepared.uri
+    selectedNativeVideo.uploadUri = prepared.uri
+    selectedNativeVideo.uploadName = prepared.fileName || item.name || 'replay-video.mp4'
+    selectedNativeVideo.uploadMimeType = prepared.mimeType || 'video/mp4'
+    selectedNativeVideo.uploadSize = prepared.size || item.size || 0
+    selectedNativeVideo.uploadConverted = Boolean(prepared.converted)
+
+    el.fileName.innerHTML = escapeHtml(selectedNativeVideo.uploadName)
+    el.fileMeta.innerHTML =
+      formatBytes(selectedNativeVideo.uploadSize || 0) +
+      ' / ' +
+      selectedNativeVideo.uploadMimeType +
+      ' / ' +
+      (item.source || 'USB 影片')
+    el.resultBox.innerHTML = selectedNativeVideo.uploadConverted
+      ? '已將 TS 準備為 MP4，預覽與 QR 會使用 MP4。'
+      : '影片已準備完成，等待上傳。'
+    showNativePreview(prepared.uri)
+    setStatus('ready', '影片已準備完成：' + escapeHtml(selectedNativeVideo.uploadName))
   }
 
   function handleFile(file) {
@@ -412,9 +482,9 @@
     window.setTimeout(function () {
       var uploadResult = parseNativeResult(
         window.ShenYueUpdater.uploadLocalVideo(
-          selectedNativeVideo.uri || '',
-          selectedNativeVideo.name || 'replay-video.mp4',
-          selectedNativeVideo.mimeType || 'video/mp4',
+          selectedNativeVideo.uploadUri || selectedNativeVideo.uri || '',
+          selectedNativeVideo.uploadName || selectedNativeVideo.name || 'replay-video.mp4',
+          selectedNativeVideo.uploadMimeType || selectedNativeVideo.mimeType || 'video/mp4',
           el.endpointInput.value,
           el.modeInput.value,
           el.tokenInput.value || ''
@@ -493,6 +563,7 @@
   }
 
   function selectedVideoName() {
+    if (selectedNativeVideo && selectedNativeVideo.uploadName) return selectedNativeVideo.uploadName
     if (selectedNativeVideo && selectedNativeVideo.name) return selectedNativeVideo.name
     if (selectedFile && selectedFile.name) return selectedFile.name
     return 'replay-video.mp4'

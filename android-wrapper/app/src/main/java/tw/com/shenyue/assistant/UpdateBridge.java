@@ -15,6 +15,10 @@ import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
+import android.media.MediaCodec;
+import android.media.MediaExtractor;
+import android.media.MediaFormat;
+import android.media.MediaMuxer;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -38,6 +42,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -345,6 +350,30 @@ public class UpdateBridge {
             } catch (JSONException ignored) {
                 // JSON error while reporting another error.
             }
+        }
+        return result.toString();
+    }
+
+    @JavascriptInterface
+    public String prepareLocalVideo(String source, String fileName, String mimeType) {
+        JSONObject result = new JSONObject();
+        try {
+            String safeSource = source == null ? "" : source.trim();
+            if (safeSource.length() == 0) {
+                result.put("ok", false);
+                result.put("message", "No local video was selected.");
+                return result.toString();
+            }
+
+            PreparedVideo prepared = preparePlayableVideo(safeSource, fileName, mimeType);
+            result.put("ok", true);
+            result.put("uri", prepared.uri);
+            result.put("fileName", prepared.fileName);
+            result.put("mimeType", prepared.mimeType);
+            result.put("size", prepared.size);
+            result.put("converted", prepared.converted);
+        } catch (Exception error) {
+            putError(result, error);
         }
         return result.toString();
     }
@@ -726,6 +755,11 @@ public class UpdateBridge {
             if (name.length() == 0) name = resolveContentName(uri);
             if (name.length() == 0) name = "replay-video.mp4";
             if (type.length() == 0) type = guessVideoMime(name);
+            if (isTransportStreamName(name) || isTransportStreamMime(type)) {
+                File cachedSource = copyContentVideoToCache(uri, name);
+                File mp4File = remuxTransportStreamToMp4(cachedSource, name);
+                return new VideoInput(new FileInputStream(mp4File), toMp4FileName(name), "video/mp4", mp4File.length());
+            }
             InputStream input = activity.getContentResolver().openInputStream(uri);
             if (input == null) throw new IllegalStateException("無法讀取本機影片。");
             return new VideoInput(input, name, type, size);
@@ -742,7 +776,210 @@ public class UpdateBridge {
         }
         if (name.length() == 0) name = file.getName();
         if (type.length() == 0) type = guessVideoMime(name);
+        if (isTransportStreamName(file.getName()) || (isTransportStreamName(name) && isTransportStreamMime(type))) {
+            File mp4File = remuxTransportStreamToMp4(file, name);
+            return new VideoInput(new FileInputStream(mp4File), toMp4FileName(name), "video/mp4", mp4File.length());
+        }
         return new VideoInput(new FileInputStream(file), name, type, file.length());
+    }
+
+    private PreparedVideo preparePlayableVideo(String source, String fileName, String mimeType) throws Exception {
+        Uri uri = source.startsWith("/") ? null : Uri.parse(source);
+        String name = fileName == null || fileName.trim().length() == 0 ? "" : fileName.trim();
+        String type = mimeType == null || mimeType.trim().length() == 0 ? "" : mimeType.trim();
+
+        if (uri != null && "content".equalsIgnoreCase(uri.getScheme())) {
+            if (name.length() == 0) name = resolveContentName(uri);
+            if (name.length() == 0) name = "replay-video.mp4";
+            if (type.length() == 0) type = guessVideoMime(name);
+            if (isTransportStreamName(name) || isTransportStreamMime(type)) {
+                File cachedSource = copyContentVideoToCache(uri, name);
+                File mp4File = remuxTransportStreamToMp4(cachedSource, name);
+                return new PreparedVideo(Uri.fromFile(mp4File).toString(), toMp4FileName(name), "video/mp4", mp4File.length(), true);
+            }
+            long size = resolveContentSize(uri);
+            return new PreparedVideo(source, name, type, size, false);
+        }
+
+        File file;
+        if (uri != null && "file".equalsIgnoreCase(uri.getScheme())) {
+            file = new File(uri.getPath());
+        } else {
+            file = new File(source);
+        }
+        if (!file.exists() || !file.isFile()) {
+            throw new IllegalStateException("Local video file was not found.");
+        }
+        if (name.length() == 0) name = file.getName();
+        if (type.length() == 0) type = guessVideoMime(name);
+        if (isTransportStreamName(file.getName()) || (isTransportStreamName(name) && isTransportStreamMime(type))) {
+            File mp4File = remuxTransportStreamToMp4(file, name);
+            return new PreparedVideo(Uri.fromFile(mp4File).toString(), toMp4FileName(name), "video/mp4", mp4File.length(), true);
+        }
+        return new PreparedVideo(Uri.fromFile(file).toString(), name, type, file.length(), false);
+    }
+
+    private File copyContentVideoToCache(Uri uri, String fileName) throws Exception {
+        File dir = remuxCacheDir();
+        String safeName = safeFileName(fileName == null || fileName.trim().length() == 0 ? "replay-video.ts" : fileName.trim());
+        File outFile = new File(dir, System.currentTimeMillis() + "-" + safeName);
+        try (InputStream input = activity.getContentResolver().openInputStream(uri);
+             FileOutputStream output = new FileOutputStream(outFile)) {
+            if (input == null) throw new IllegalStateException("Unable to read the selected video.");
+            copyStream(input, output);
+        }
+        if (outFile.length() <= 0) {
+            throw new IllegalStateException("The selected video is empty.");
+        }
+        return outFile;
+    }
+
+    private File remuxTransportStreamToMp4(File source, String displayName) throws Exception {
+        if (source == null || !source.exists() || !source.isFile()) {
+            throw new IllegalStateException("Transport stream source file was not found.");
+        }
+
+        File dir = remuxCacheDir();
+        File output = new File(dir, System.currentTimeMillis() + "-" + safeFileName(toMp4FileName(displayName)));
+        MediaExtractor extractor = new MediaExtractor();
+        MediaMuxer muxer = null;
+        boolean muxerStarted = false;
+        try {
+            extractor.setDataSource(source.getAbsolutePath());
+            int trackCount = extractor.getTrackCount();
+            int[] trackMap = new int[trackCount];
+            for (int i = 0; i < trackMap.length; i += 1) {
+                trackMap[i] = -1;
+            }
+
+            muxer = new MediaMuxer(output.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            boolean hasVideo = false;
+            int selectedTracks = 0;
+            int maxInputSize = 4 * 1024 * 1024;
+            for (int i = 0; i < trackCount; i += 1) {
+                MediaFormat format = extractor.getTrackFormat(i);
+                String mime = format.containsKey(MediaFormat.KEY_MIME) ? format.getString(MediaFormat.KEY_MIME) : "";
+                if (mime == null || (!mime.startsWith("video/") && !mime.startsWith("audio/"))) continue;
+                trackMap[i] = muxer.addTrack(format);
+                extractor.selectTrack(i);
+                selectedTracks += 1;
+                if (mime.startsWith("video/")) hasVideo = true;
+                if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                    maxInputSize = Math.max(maxInputSize, format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE));
+                }
+            }
+
+            if (!hasVideo || selectedTracks == 0) {
+                throw new IllegalStateException("No MP4-compatible video track was found in this TS file.");
+            }
+
+            maxInputSize = Math.max(1024 * 1024, Math.min(maxInputSize, 32 * 1024 * 1024));
+            ByteBuffer buffer = ByteBuffer.allocate(maxInputSize);
+            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+            muxer.start();
+            muxerStarted = true;
+            long writtenSamples = 0L;
+
+            while (true) {
+                int trackIndex = extractor.getSampleTrackIndex();
+                if (trackIndex < 0) break;
+                int outputTrack = trackIndex < trackMap.length ? trackMap[trackIndex] : -1;
+                if (outputTrack < 0) {
+                    extractor.advance();
+                    continue;
+                }
+
+                buffer.clear();
+                int sampleSize = extractor.readSampleData(buffer, 0);
+                if (sampleSize < 0) break;
+                long sampleTime = extractor.getSampleTime();
+                int sampleFlags = extractor.getSampleFlags();
+                int bufferFlags = (sampleFlags & MediaExtractor.SAMPLE_FLAG_SYNC) != 0
+                        ? MediaCodec.BUFFER_FLAG_KEY_FRAME
+                        : 0;
+                info.set(0, sampleSize, Math.max(0L, sampleTime), bufferFlags);
+                muxer.writeSampleData(outputTrack, buffer, info);
+                writtenSamples += 1L;
+                extractor.advance();
+            }
+            if (writtenSamples == 0L) {
+                throw new IllegalStateException("No playable samples were found in this TS file.");
+            }
+            muxer.stop();
+            muxerStarted = false;
+        } catch (Exception error) {
+            if (output.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                output.delete();
+            }
+            throw new IllegalStateException("Unable to prepare TS video as MP4: " + safeMessage(error), error);
+        } finally {
+            if (muxer != null) {
+                try {
+                    if (muxerStarted) muxer.stop();
+                } catch (Exception ignored) {
+                    // The primary error, if any, was already captured above.
+                }
+                try {
+                    muxer.release();
+                } catch (Exception ignored) {
+                    // Release best effort.
+                }
+            }
+            extractor.release();
+        }
+
+        if (output.length() <= 0) {
+            throw new IllegalStateException("Prepared MP4 file is empty.");
+        }
+        return output;
+    }
+
+    private File remuxCacheDir() throws Exception {
+        File dir = new File(activity.getCacheDir(), "replay-remux");
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IllegalStateException("Unable to create replay video cache.");
+        }
+        cleanOldFiles(dir, 24L * 60L * 60L * 1000L);
+        return dir;
+    }
+
+    private void cleanOldFiles(File dir, long maxAgeMillis) {
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        long cutoff = System.currentTimeMillis() - maxAgeMillis;
+        for (File file : files) {
+            if (file.isFile() && file.lastModified() < cutoff) {
+                //noinspection ResultOfMethodCallIgnored
+                file.delete();
+            }
+        }
+    }
+
+    private boolean isTransportStreamName(String fileName) {
+        String value = fileName == null ? "" : fileName.toLowerCase(Locale.US);
+        return value.endsWith(".ts") || value.endsWith(".mts") || value.endsWith(".m2ts");
+    }
+
+    private boolean isTransportStreamMime(String mimeType) {
+        String value = mimeType == null ? "" : mimeType.toLowerCase(Locale.US);
+        return value.equals("video/mp2t")
+                || value.equals("video/mpeg")
+                || value.equals("video/mpeg2")
+                || value.equals("application/x-mpegurl");
+    }
+
+    private String toMp4FileName(String fileName) {
+        String value = fileName == null || fileName.trim().length() == 0 ? "replay-video" : fileName.trim();
+        int dot = value.lastIndexOf('.');
+        if (dot > 0) value = value.substring(0, dot);
+        if (value.length() == 0) value = "replay-video";
+        return value + ".mp4";
+    }
+
+    private String safeMessage(Exception error) {
+        String message = error.getMessage();
+        return message == null || message.length() == 0 ? error.toString() : message;
     }
 
     private long resolveContentSize(Uri uri) {
@@ -1179,6 +1416,22 @@ public class UpdateBridge {
             object.put("message", error.getMessage() == null ? error.toString() : error.getMessage());
         } catch (JSONException ignored) {
             // JSON error while reporting another error.
+        }
+    }
+
+    private static class PreparedVideo {
+        final String uri;
+        final String fileName;
+        final String mimeType;
+        final long size;
+        final boolean converted;
+
+        PreparedVideo(String uri, String fileName, String mimeType, long size, boolean converted) {
+            this.uri = uri;
+            this.fileName = fileName;
+            this.mimeType = mimeType;
+            this.size = size;
+            this.converted = converted;
         }
     }
 
