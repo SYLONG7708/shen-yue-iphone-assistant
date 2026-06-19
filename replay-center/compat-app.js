@@ -185,7 +185,7 @@
     }
     if (state.readVideoGranted || state.allFilesGranted) {
       el.nativePermissionButton.innerHTML = state.allFilesGranted ? '已可讀取所有檔案' : '已可讀取影片'
-      el.nativeVideoList.innerHTML = '<div class="result-box">固定讀取 USB1/DCIM/CAMERA 與 USB2/DCIM/CAMERA 內的 MP4。</div>'
+      el.nativeVideoList.innerHTML = '<div class="result-box">固定讀取 USB 的 DCIM/CAMERA MP4；會相容 sdcard1、usb_storage、udisk 類車機掛載點。</div>'
       return
     }
     el.nativeVideoList.innerHTML = '<div class="result-box">車機尚未授權讀取 USB 影片，請先按「允許讀取影片」。</div>'
@@ -194,7 +194,7 @@
   function requestNativeVideoAccess() {
     if (!hasNativeVideoBridge() || typeof window.ShenYueUpdater.requestVideoAccess !== 'function') return
     window.ShenYueUpdater.requestVideoAccess()
-    setStatus('ready', '已開啟 Android 權限畫面；授權後回到本頁再按「掃描 USB1/USB2」。')
+    setStatus('ready', '已開啟 Android 權限畫面；授權後回到本頁再按「掃描 USB/DCIM」。')
     window.setTimeout(refreshNativeAccessState, 800)
   }
 
@@ -203,7 +203,7 @@
       setStatus('error', '目前不是 Android APK 車機模式，請使用上方選檔。')
       return
     }
-    setStatus('busy', '正在掃描 USB1/DCIM/CAMERA 與 USB2/DCIM/CAMERA 內的 MP4。')
+    setStatus('busy', '正在掃描 USB1/USB2 與車機實際 USB 掛載點的 DCIM/CAMERA MP4。')
     el.nativeVideoList.innerHTML = '<div class="result-box">掃描中...</div>'
     window.setTimeout(function () {
       var result = parseNativeResult(window.ShenYueUpdater.listLocalVideos())
@@ -212,21 +212,24 @@
         setStatus('error', escapeHtml(result.message || '掃描失敗'))
         return
       }
-      renderNativeVideos(result.items || [])
+      renderNativeVideos(result.items || [], result.scanRoots || [])
     }, 60)
   }
 
-  function renderNativeVideos(items) {
+  function renderNativeVideos(items, scanRoots) {
     if (!items.length) {
-      el.nativeVideoList.innerHTML = '<div class="result-box">沒有找到 USB1/DCIM/CAMERA 或 USB2/DCIM/CAMERA 內的 MP4。請確認 USB 裡有 DCIM/CAMERA 資料夾。</div>'
-      setStatus('ready', '掃描完成，但 USB1/USB2 的 DCIM/CAMERA 沒有 MP4。')
+      var roots = Array.isArray(scanRoots) && scanRoots.length
+        ? '<small>已檢查：' + escapeHtml(scanRoots.join('、')) + '</small>'
+        : '<small>沒有找到可讀取的 USB DCIM/CAMERA 資料夾。</small>'
+      el.nativeVideoList.innerHTML = '<div class="result-box">沒有找到 USB DCIM/CAMERA 內的 MP4。請確認影片放在 USB 的 DCIM/CAMERA 資料夾。' + roots + '</div>'
+      setStatus('ready', '掃描完成，但 USB DCIM/CAMERA 沒有 MP4。')
       return
     }
     el.nativeVideoList.innerHTML = ''
     for (var i = 0; i < items.length; i += 1) {
       appendNativeVideoItem(items[i])
     }
-    setStatus('ready', '掃描完成，從 USB1/USB2 DCIM/CAMERA 找到 ' + items.length + ' 個 MP4。')
+    setStatus('ready', '掃描完成，從 USB DCIM/CAMERA 找到 ' + items.length + ' 個 MP4。')
   }
 
   function appendNativeVideoItem(item) {

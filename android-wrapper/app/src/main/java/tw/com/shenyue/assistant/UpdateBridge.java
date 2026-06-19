@@ -312,19 +312,21 @@ public class UpdateBridge {
     public String listLocalVideos() {
         JSONObject result = new JSONObject();
         JSONArray items = new JSONArray();
+        JSONArray scanRoots = new JSONArray();
         Set<String> seen = new HashSet<>();
         try {
             appendVideoAccessState(result);
             if (!hasVideoReadPermission() && !hasAllFilesAccess()) {
                 result.put("ok", false);
                 result.put("code", "NEED_VIDEO_PERMISSION");
-                result.put("message", "請先允許讀取影片；固定讀取 USB1/DCIM/CAMERA 與 USB2/DCIM/CAMERA 可能需要所有檔案存取。");
+                result.put("message", "請先允許讀取影片；固定讀取 USB 的 DCIM/CAMERA 可能需要所有檔案存取。");
                 result.put("items", items);
+                result.put("scanRoots", scanRoots);
                 return result.toString();
             }
 
             if (canScanRawExternalFiles()) {
-                scanUsbCameraVideoFiles(items, seen);
+                scanUsbCameraVideoFiles(items, seen, scanRoots);
             } else {
                 queryVideoStore(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, items, seen);
                 queryVideoStore(MediaStore.Video.Media.INTERNAL_CONTENT_URI, items, seen);
@@ -333,11 +335,13 @@ public class UpdateBridge {
             result.put("ok", true);
             result.put("items", items);
             result.put("count", items.length());
-            result.put("scanPaths", "USB1/DCIM/CAMERA, USB2/DCIM/CAMERA");
+            result.put("scanRoots", scanRoots);
+            result.put("scanPaths", "USB1/USB2/sdcard1/usb_storage/udisk DCIM/CAMERA");
         } catch (Exception error) {
             putError(result, error);
             try {
                 result.put("items", items);
+                result.put("scanRoots", scanRoots);
             } catch (JSONException ignored) {
                 // JSON error while reporting another error.
             }
@@ -503,10 +507,10 @@ public class UpdateBridge {
         }
     }
 
-    private void scanUsbCameraVideoFiles(JSONArray items, Set<String> seen) {
+    private void scanUsbCameraVideoFiles(JSONArray items, Set<String> seen, JSONArray scanRoots) {
         List<File> roots = new ArrayList<>();
-        addKnownUsbCameraRoots(roots);
-        discoverUsbCameraRoots(roots);
+        addKnownUsbCameraRoots(roots, scanRoots);
+        discoverUsbCameraRoots(roots, scanRoots);
 
         for (File root : roots) {
             if (items.length() >= LOCAL_VIDEO_SCAN_LIMIT) return;
@@ -514,7 +518,25 @@ public class UpdateBridge {
         }
     }
 
-    private void addKnownUsbCameraRoots(List<File> roots) {
+    private void addKnownUsbCameraRoots(List<File> roots, JSONArray scanRoots) {
+        File[] directVolumes = {
+                new File("/storage/sdcard1"),
+                new File("/storage/sdcard2"),
+                new File("/storage/usb_storage"),
+                new File("/mnt/media_rw/usb_storage"),
+                new File("/mnt/sdcard"),
+                new File("/mnt/usb_storage"),
+                new File("/mnt/usbhost"),
+                new File("/storage/usbotg"),
+                new File("/storage/udisk"),
+                new File("/storage/udisk1"),
+                new File("/mnt/udisk"),
+                new File("/mnt/udisk1")
+        };
+        for (File volume : directVolumes) {
+            addUsbCameraRoot(roots, volume, scanRoots);
+        }
+
         String[] parents = {
                 "/storage",
                 "/mnt/media_rw",
@@ -523,20 +545,26 @@ public class UpdateBridge {
                 "/mnt",
                 "/mnt/media_rw/usb_storage"
         };
-        String[] volumes = { "USB1", "USB2", "usb1", "usb2", "Usb1", "Usb2" };
+        String[] volumes = {
+                "USB1", "USB2", "usb1", "usb2", "Usb1", "Usb2",
+                "USB_DISK0", "USB_DISK1", "usb_storage", "sdcard1", "sdcard2",
+                "udisk", "udisk1", "usbotg", "Storage01", "Storage02"
+        };
         for (String parent : parents) {
             for (String volume : volumes) {
-                addUsbCameraRoot(roots, new File(parent, volume));
+                addUsbCameraRoot(roots, new File(parent, volume), scanRoots);
             }
         }
     }
 
-    private void discoverUsbCameraRoots(List<File> roots) {
+    private void discoverUsbCameraRoots(List<File> roots, JSONArray scanRoots) {
         File[] parents = {
                 new File("/storage"),
                 new File("/mnt/media_rw"),
                 new File("/storage/usb_storage"),
                 new File("/mnt/usb_storage"),
+                new File("/mnt/media_rw/usb_storage"),
+                new File("/mnt/usbhost"),
                 new File("/mnt")
         };
         for (File parent : parents) {
@@ -548,20 +576,31 @@ public class UpdateBridge {
             }
             if (children == null) continue;
             for (File child : children) {
-                if (child.isDirectory() && isUsbSlotName(child.getName())) {
-                    addUsbCameraRoot(roots, child);
+                if (!child.isDirectory() || isIgnoredStorageName(child.getName())) continue;
+                addUsbCameraRoot(roots, child, scanRoots);
+                File[] grandchildren;
+                try {
+                    grandchildren = child.listFiles();
+                } catch (Exception error) {
+                    continue;
+                }
+                if (grandchildren == null) continue;
+                for (File grandchild : grandchildren) {
+                    if (grandchild.isDirectory() && !isIgnoredStorageName(grandchild.getName())) {
+                        addUsbCameraRoot(roots, grandchild, scanRoots);
+                    }
                 }
             }
         }
     }
 
-    private void addUsbCameraRoot(List<File> roots, File volumeRoot) {
-        addRoot(roots, new File(new File(volumeRoot, "DCIM"), "CAMERA"));
-        addRoot(roots, new File(new File(volumeRoot, "DCIM"), "Camera"));
-        addRoot(roots, new File(new File(volumeRoot, "DCIM"), "camera"));
+    private void addUsbCameraRoot(List<File> roots, File volumeRoot, JSONArray scanRoots) {
+        addRoot(roots, new File(new File(volumeRoot, "DCIM"), "CAMERA"), scanRoots);
+        addRoot(roots, new File(new File(volumeRoot, "DCIM"), "Camera"), scanRoots);
+        addRoot(roots, new File(new File(volumeRoot, "DCIM"), "camera"), scanRoots);
     }
 
-    private void addRoot(List<File> roots, File root) {
+    private void addRoot(List<File> roots, File root, JSONArray scanRoots) {
         if (root != null && root.exists() && root.canRead()) {
             String rootPath;
             try {
@@ -577,6 +616,7 @@ public class UpdateBridge {
                 }
             }
             roots.add(root);
+            if (scanRoots != null) scanRoots.put(rootPath);
         }
     }
 
@@ -622,20 +662,37 @@ public class UpdateBridge {
         }
     }
 
-    private boolean isUsbSlotName(String name) {
+    private boolean isIgnoredStorageName(String name) {
         String value = name == null ? "" : name.toLowerCase(Locale.US);
-        return "usb1".equals(value) || "usb2".equals(value);
+        return value.length() == 0
+                || "self".equals(value)
+                || "emulated".equals(value)
+                || "legacy".equals(value)
+                || "asec".equals(value)
+                || "obb".equals(value)
+                || "system".equals(value)
+                || "vendor".equals(value)
+                || "product".equals(value)
+                || "apex".equals(value)
+                || "data".equals(value);
     }
 
     private boolean isUsbCameraPath(String path) {
         String value = normalizePath(path);
-        return (value.contains("/usb1/") || value.contains("/usb2/"))
-                && value.contains("/dcim/camera");
+        return value.contains("/dcim/camera") && !value.contains("/emulated/0/android/");
     }
 
     private String describeUsbCameraSource(String path) {
         String value = normalizePath(path);
         if (value.contains("/usb2/")) return "USB2/DCIM/CAMERA";
+        if (value.contains("/sdcard2/")) return "sdcard2/DCIM/CAMERA";
+        if (value.contains("/sdcard1/")) return "sdcard1/DCIM/CAMERA";
+        if (value.contains("/usb_storage/")) return "usb_storage/DCIM/CAMERA";
+        if (value.contains("/udisk1/")) return "udisk1/DCIM/CAMERA";
+        if (value.contains("/udisk/")) return "udisk/DCIM/CAMERA";
+        if (value.contains("/usbotg/")) return "usbotg/DCIM/CAMERA";
+        if (value.contains("/storage01/")) return "Storage01/DCIM/CAMERA";
+        if (value.contains("/storage02/")) return "Storage02/DCIM/CAMERA";
         return "USB1/DCIM/CAMERA";
     }
 
