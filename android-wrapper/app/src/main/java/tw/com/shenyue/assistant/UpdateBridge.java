@@ -56,7 +56,7 @@ public class UpdateBridge {
     private static final int VIDEO_PERMISSION_REQUEST_CODE = 7710;
     private static final int LOCAL_VIDEO_SCAN_LIMIT = 120;
     private static final String[] VIDEO_EXTENSIONS = {
-            ".mp4"
+            ".mp4", ".ts", ".mts", ".m2ts"
     };
 
     private final Activity activity;
@@ -336,7 +336,7 @@ public class UpdateBridge {
             result.put("items", items);
             result.put("count", items.length());
             result.put("scanRoots", scanRoots);
-            result.put("scanPaths", "USB1/USB2/sdcard1/usb_storage/udisk DCIM/CAMERA");
+            result.put("scanPaths", "USB1/USB2/sdcard1/usb_storage/udisk DCIM/CAMERA MP4/TS");
         } catch (Exception error) {
             putError(result, error);
             try {
@@ -879,7 +879,7 @@ public class UpdateBridge {
         if (value.endsWith(".webm")) return "video/webm";
         if (value.endsWith(".mkv")) return "video/x-matroska";
         if (value.endsWith(".avi")) return "video/x-msvideo";
-        if (value.endsWith(".ts")) return "video/mp2t";
+        if (value.endsWith(".ts") || value.endsWith(".mts") || value.endsWith(".m2ts")) return "video/mp2t";
         if (value.endsWith(".3gp")) return "video/3gpp";
         if (value.endsWith(".3g2")) return "video/3gpp2";
         return "video/mp4";

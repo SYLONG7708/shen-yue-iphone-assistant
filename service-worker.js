@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v232-usb-mount-camera-mp4";
+const cacheName = "shen-yue-assistant-v233-usb-camera-ts";
 const assets = [
   "./",
   "./index.html",

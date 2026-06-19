@@ -185,7 +185,7 @@
     }
     if (state.readVideoGranted || state.allFilesGranted) {
       el.nativePermissionButton.innerHTML = state.allFilesGranted ? '已可讀取所有檔案' : '已可讀取影片'
-      el.nativeVideoList.innerHTML = '<div class="result-box">固定讀取 USB 的 DCIM/CAMERA MP4；會相容 sdcard1、usb_storage、udisk 類車機掛載點。</div>'
+      el.nativeVideoList.innerHTML = '<div class="result-box">固定讀取 USB 的 DCIM/CAMERA 影片；支援 MP4 與 TS，並相容 sdcard1、usb_storage、udisk 類車機掛載點。</div>'
       return
     }
     el.nativeVideoList.innerHTML = '<div class="result-box">車機尚未授權讀取 USB 影片，請先按「允許讀取影片」。</div>'
@@ -203,7 +203,7 @@
       setStatus('error', '目前不是 Android APK 車機模式，請使用上方選檔。')
       return
     }
-    setStatus('busy', '正在掃描 USB1/USB2 與車機實際 USB 掛載點的 DCIM/CAMERA MP4。')
+    setStatus('busy', '正在掃描 USB1/USB2 與車機實際 USB 掛載點的 DCIM/CAMERA 影片。')
     el.nativeVideoList.innerHTML = '<div class="result-box">掃描中...</div>'
     window.setTimeout(function () {
       var result = parseNativeResult(window.ShenYueUpdater.listLocalVideos())
@@ -221,15 +221,15 @@
       var roots = Array.isArray(scanRoots) && scanRoots.length
         ? '<small>已檢查：' + escapeHtml(scanRoots.join('、')) + '</small>'
         : '<small>沒有找到可讀取的 USB DCIM/CAMERA 資料夾。</small>'
-      el.nativeVideoList.innerHTML = '<div class="result-box">沒有找到 USB DCIM/CAMERA 內的 MP4。請確認影片放在 USB 的 DCIM/CAMERA 資料夾。' + roots + '</div>'
-      setStatus('ready', '掃描完成，但 USB DCIM/CAMERA 沒有 MP4。')
+      el.nativeVideoList.innerHTML = '<div class="result-box">沒有找到 USB DCIM/CAMERA 內的 MP4 / TS。請確認影片放在 USB 的 DCIM/CAMERA 資料夾。' + roots + '</div>'
+      setStatus('ready', '掃描完成，但 USB DCIM/CAMERA 沒有 MP4 / TS。')
       return
     }
     el.nativeVideoList.innerHTML = ''
     for (var i = 0; i < items.length; i += 1) {
       appendNativeVideoItem(items[i])
     }
-    setStatus('ready', '掃描完成，從 USB DCIM/CAMERA 找到 ' + items.length + ' 個 MP4。')
+    setStatus('ready', '掃描完成，從 USB DCIM/CAMERA 找到 ' + items.length + ' 個影片。')
   }
 
   function appendNativeVideoItem(item) {
@@ -260,7 +260,7 @@
     setProgress(0)
     el.fileInput.value = ''
     el.fileName.innerHTML = escapeHtml(item.name || 'replay-video.mp4')
-    el.fileMeta.innerHTML = formatBytes(item.size || 0) + ' / ' + (item.mimeType || 'video') + ' / ' + (item.source || 'USB MP4')
+    el.fileMeta.innerHTML = formatBytes(item.size || 0) + ' / ' + (item.mimeType || 'video') + ' / ' + (item.source || 'USB 影片')
     el.uploadButton.disabled = false
     el.shareButton.disabled = true
     el.resultBox.innerHTML = '已選擇車機影片，等待上傳。'
@@ -278,7 +278,7 @@
 
   function handleFile(file) {
     if (!file) return
-    if (file.type && file.type.indexOf('video/') !== 0 && !/\.(mp4|m4v|mov|mkv|webm)$/i.test(file.name)) {
+    if (file.type && file.type.indexOf('video/') !== 0 && !/\.(mp4|m4v|mov|mkv|webm|ts|mts|m2ts)$/i.test(file.name)) {
       setStatus('error', '請選擇影片檔。')
       return
     }
@@ -309,7 +309,7 @@
     if (selectedObjectUrl) URL.revokeObjectURL(selectedObjectUrl)
     selectedObjectUrl = ''
     el.fileInput.value = ''
-    el.fileName.innerHTML = '選擇 MP4 / MOV / MKV 影片'
+    el.fileName.innerHTML = '選擇 MP4 / TS / MOV 影片'
     el.fileMeta.innerHTML = '點擊後從雷霆模擬器選檔'
     el.previewVideo.removeAttribute('src')
     el.previewVideo.className = 'hidden'

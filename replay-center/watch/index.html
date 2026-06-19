@@ -186,6 +186,8 @@
         m3u8: "application/vnd.apple.mpegurl",
         m3u: "application/vnd.apple.mpegurl",
         ts: "video/mp2t",
+        mts: "video/mp2t",
+        m2ts: "video/mp2t",
         "3gp": "video/3gpp",
         "3g2": "video/3gpp2",
         mkv: "video/x-matroska",
@@ -202,13 +204,15 @@
         m3u8: "HLS / M3U8",
         m3u: "HLS / M3U8",
         ts: "MPEG-TS",
+        mts: "MPEG-TS",
+        m2ts: "MPEG-TS",
         "3gp": "3GP",
         "3g2": "3G2",
         mkv: "MKV",
         avi: "AVI",
         flv: "FLV"
       };
-      const BROWSER_RISKY_EXTENSIONS = new Set(["mkv", "avi", "flv", "ts"]);
+      const BROWSER_RISKY_EXTENSIONS = new Set(["mkv", "avi", "flv", "ts", "mts", "m2ts"]);
       let hlsInstance = null;
       let hlsScriptPromise = null;
       let currentVideo = "";
