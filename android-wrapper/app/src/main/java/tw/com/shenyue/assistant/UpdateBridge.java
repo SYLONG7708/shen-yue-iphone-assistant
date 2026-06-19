@@ -416,6 +416,15 @@ public class UpdateBridge {
 
     @JavascriptInterface
     public String uploadLocalVideo(String source, String fileName, String mimeType, String endpoint, String mode, String token) {
+        return uploadLocalVideoInternal(source, fileName, mimeType, endpoint, mode, token, true);
+    }
+
+    @JavascriptInterface
+    public String uploadLocalVideoOriginal(String source, String fileName, String mimeType, String endpoint, String mode, String token) {
+        return uploadLocalVideoInternal(source, fileName, mimeType, endpoint, mode, token, false);
+    }
+
+    private String uploadLocalVideoInternal(String source, String fileName, String mimeType, String endpoint, String mode, String token, boolean remuxTransportStreams) {
         JSONObject result = new JSONObject();
         VideoInput video = null;
         try {
@@ -432,7 +441,7 @@ public class UpdateBridge {
                 return result.toString();
             }
 
-            video = openVideoInput(safeSource, fileName, mimeType);
+            video = openVideoInput(safeSource, fileName, mimeType, remuxTransportStreams);
             String uploadUrl = resolveUploadEndpoint(safeEndpoint, video.fileName);
             String responseText;
             if ("POST".equalsIgnoreCase(mode)) {
@@ -782,6 +791,10 @@ public class UpdateBridge {
     }
 
     private VideoInput openVideoInput(String source, String fileName, String mimeType) throws Exception {
+        return openVideoInput(source, fileName, mimeType, true);
+    }
+
+    private VideoInput openVideoInput(String source, String fileName, String mimeType, boolean remuxTransportStreams) throws Exception {
         Uri uri = source.startsWith("/") ? null : Uri.parse(source);
         String name = fileName == null || fileName.trim().length() == 0 ? "" : fileName.trim();
         String type = mimeType == null || mimeType.trim().length() == 0 ? "" : mimeType.trim();
@@ -791,7 +804,7 @@ public class UpdateBridge {
             if (name.length() == 0) name = resolveContentName(uri);
             if (name.length() == 0) name = "replay-video.mp4";
             if (type.length() == 0) type = guessVideoMime(name);
-            if (isTransportStreamName(name) || isTransportStreamMime(type)) {
+            if (remuxTransportStreams && (isTransportStreamName(name) || isTransportStreamMime(type))) {
                 File cachedSource = copyContentVideoToCache(uri, name);
                 File mp4File = remuxTransportStreamToMp4(cachedSource, name);
                 return new VideoInput(new FileInputStream(mp4File), toMp4FileName(name), "video/mp4", mp4File.length());
@@ -812,7 +825,7 @@ public class UpdateBridge {
         }
         if (name.length() == 0) name = file.getName();
         if (type.length() == 0) type = guessVideoMime(name);
-        if (isTransportStreamName(file.getName()) || (isTransportStreamName(name) && isTransportStreamMime(type))) {
+        if (remuxTransportStreams && (isTransportStreamName(file.getName()) || (isTransportStreamName(name) && isTransportStreamMime(type)))) {
             File mp4File = remuxTransportStreamToMp4(file, name);
             return new VideoInput(new FileInputStream(mp4File), toMp4FileName(name), "video/mp4", mp4File.length());
         }
@@ -944,17 +957,25 @@ public class UpdateBridge {
 
             muxer = new MediaMuxer(output.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
             boolean hasVideo = false;
+            boolean hasAudio = false;
             int selectedTracks = 0;
             int maxInputSize = 4 * 1024 * 1024;
             long durationUs = -1L;
             for (int i = 0; i < trackCount; i += 1) {
                 MediaFormat format = extractor.getTrackFormat(i);
                 String mime = format.containsKey(MediaFormat.KEY_MIME) ? format.getString(MediaFormat.KEY_MIME) : "";
-                if (mime == null || (!mime.startsWith("video/") && !mime.startsWith("audio/"))) continue;
-                trackMap[i] = muxer.addTrack(format);
+                if (!isSupportedMp4Track(mime, hasVideo, hasAudio)) continue;
+                int outputTrack;
+                try {
+                    outputTrack = muxer.addTrack(format);
+                } catch (Exception unsupportedTrack) {
+                    continue;
+                }
+                trackMap[i] = outputTrack;
                 extractor.selectTrack(i);
                 selectedTracks += 1;
                 if (mime.startsWith("video/")) hasVideo = true;
+                if (mime.startsWith("audio/")) hasAudio = true;
                 if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
                     maxInputSize = Math.max(maxInputSize, format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE));
                 }
@@ -1079,6 +1100,26 @@ public class UpdateBridge {
                 || value.equals("video/mpeg")
                 || value.equals("video/mpeg2")
                 || value.equals("application/x-mpegurl");
+    }
+
+    private boolean isSupportedMp4Track(String mimeType, boolean hasVideo, boolean hasAudio) {
+        String value = mimeType == null ? "" : mimeType.toLowerCase(Locale.US);
+        if (value.startsWith("video/")) {
+            return !hasVideo && (
+                    value.equals("video/avc")
+                            || value.equals("video/hevc")
+                            || value.equals("video/mp4v-es")
+                            || value.equals("video/3gpp")
+            );
+        }
+        if (value.startsWith("audio/")) {
+            return !hasAudio && (
+                    value.equals("audio/mp4a-latm")
+                            || value.equals("audio/3gpp")
+                            || value.equals("audio/amr-wb")
+            );
+        }
+        return false;
     }
 
     private String toMp4FileName(String fileName) {

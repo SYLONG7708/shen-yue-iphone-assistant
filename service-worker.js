@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v235-replay-progress-cleanup";
+const cacheName = "shen-yue-assistant-v236-replay-nav-remux-fallback";
 const assets = [
   "./",
   "./index.html",

@@ -345,9 +345,7 @@
       )
     )
     if (!started.ok || !started.taskId) {
-      el.uploadButton.disabled = true
-      setProgress(0, false)
-      setStatus('error', 'TS 轉 MP4 啟動失敗：' + escapeHtml(started.message || '未知錯誤'))
+      enableOriginalNativeUploadFallback(item, 'TS 轉 MP4 啟動失敗：' + escapeHtml(started.message || '未知錯誤'))
       return
     }
     pollNativeVideoPrepare(item, started.taskId)
@@ -359,9 +357,7 @@
     if (!selectedNativeVideo || selectedNativeVideo.uri !== item.uri) return
 
     if (!state.ok) {
-      el.uploadButton.disabled = true
-      setProgress(0, false)
-      setStatus('error', 'TS 轉 MP4 失敗：' + escapeHtml(state.message || '未知錯誤'))
+      enableOriginalNativeUploadFallback(item, 'TS 轉 MP4 失敗：' + escapeHtml(state.message || '未知錯誤'))
       return
     }
 
@@ -373,11 +369,7 @@
     }
     if (state.status === 'failed') {
       clearPreparePoll()
-      el.uploadButton.disabled = true
-      el.resultBox.innerHTML = 'TS 影片轉成 MP4 失敗，手機瀏覽器可能無法直接播放原始 TS。'
-      if (item.uri) showNativePreview(item.uri)
-      setProgress(0, false)
-      setStatus('error', 'TS 轉 MP4 失敗：' + escapeHtml(state.message || '未知錯誤'))
+      enableOriginalNativeUploadFallback(item, 'TS 轉 MP4 失敗：' + escapeHtml(state.message || '未知錯誤'))
       return
     }
 
@@ -399,11 +391,7 @@
     if (!selectedNativeVideo || selectedNativeVideo.uri !== item.uri) return
 
     if (!prepared.ok || !prepared.uri) {
-      el.resultBox.innerHTML = 'TS 影片轉成 MP4 失敗，手機瀏覽器可能無法直接播放原始 TS。'
-      if (item.uri) showNativePreview(item.uri)
-      el.uploadButton.disabled = true
-      setProgress(0, false)
-      setStatus('error', 'TS 轉 MP4 失敗：' + escapeHtml(prepared.message || '未知錯誤'))
+      enableOriginalNativeUploadFallback(item, 'TS 轉 MP4 失敗：' + escapeHtml(prepared.message || '未知錯誤'))
       return
     }
 
@@ -433,6 +421,26 @@
     el.uploadButton.disabled = false
     setProgress(100, false)
     setStatus('ready', '影片已準備完成：' + escapeHtml(selectedNativeVideo.uploadName))
+  }
+
+  function enableOriginalNativeUploadFallback(item, message) {
+    if (!selectedNativeVideo || selectedNativeVideo.uri !== item.uri) return
+    selectedNativeVideo.uploadUri = item.uri || ''
+    selectedNativeVideo.uploadName = item.name || 'replay-video.ts'
+    selectedNativeVideo.uploadMimeType = item.mimeType || 'video/mp2t'
+    selectedNativeVideo.uploadSize = item.size || 0
+    selectedNativeVideo.uploadOriginal = true
+    el.fileName.innerHTML = escapeHtml(selectedNativeVideo.uploadName)
+    el.fileMeta.innerHTML =
+      formatBytes(selectedNativeVideo.uploadSize || 0) +
+      ' / ' +
+      selectedNativeVideo.uploadMimeType +
+      ' / 原始檔'
+    el.resultBox.innerHTML = 'MP4 準備失敗，仍可上傳原始影片產生 QR；手機可能需要下載或外部播放器。'
+    if (item.uri) showNativePreview(item.uri)
+    el.uploadButton.disabled = false
+    setProgress(0, false)
+    setStatus('error', message)
   }
 
   function handleFile(file) {
@@ -571,8 +579,14 @@
 
     setStatus('busy', '正在由 Android 直接讀取並上傳車機影片，影片較大時請等待。')
     window.setTimeout(function () {
+      var uploader =
+        selectedNativeVideo.uploadOriginal &&
+        typeof window.ShenYueUpdater.uploadLocalVideoOriginal === 'function'
+          ? window.ShenYueUpdater.uploadLocalVideoOriginal
+          : window.ShenYueUpdater.uploadLocalVideo
       var uploadResult = parseNativeResult(
-        window.ShenYueUpdater.uploadLocalVideo(
+        uploader.call(
+          window.ShenYueUpdater,
           selectedNativeVideo.uploadUri || selectedNativeVideo.uri || '',
           selectedNativeVideo.uploadName || selectedNativeVideo.name || 'replay-video.mp4',
           selectedNativeVideo.uploadMimeType || selectedNativeVideo.mimeType || 'video/mp4',
