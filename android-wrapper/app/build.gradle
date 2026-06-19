@@ -45,8 +45,8 @@ android {
         applicationId "tw.com.shenyue.assistant"
         minSdk 23
         targetSdk 36
-        versionCode 130
-        versionName "1.0.30"
+        versionCode 131
+        versionName "1.0.31"
     }
 
     flavorDimensions "content"
@@ -96,6 +96,23 @@ android {
             versionNameSuffix "-car-legacy-built-in"
             resValue "string", "app_name", "申悅車機助手"
             buildConfigField "String", "HOME_URL", "\"file:///android_asset/www/index.html\""
+        }
+
+        carLegacyCloud {
+            dimension "content"
+            targetSdk 28
+            versionNameSuffix "-car-legacy-cloud"
+            resValue "string", "app_name", "申悅車機助手"
+            buildConfigField "String", "HOME_URL", "\"https://sylong7708.github.io/shen-yue-iphone-assistant/\""
+        }
+
+        carLegacyCloudBuiltIn {
+            dimension "content"
+            applicationIdSuffix ".builtin"
+            targetSdk 28
+            versionNameSuffix "-car-legacy-cloud-built-in"
+            resValue "string", "app_name", "申悅車機助手"
+            buildConfigField "String", "HOME_URL", "\"https://sylong7708.github.io/shen-yue-iphone-assistant/\""
         }
     }
 

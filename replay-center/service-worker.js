@@ -1,4 +1,4 @@
-const CACHE_NAME = 'replay-center-v13-local-mp4-download'
+const CACHE_NAME = 'replay-center-v14-download-share-cloud'
 const STATIC_ASSETS = ['/', '/remote-config.json', '/manifest.webmanifest', '/favicon.svg']
 
 self.addEventListener('install', (event) => {

@@ -853,7 +853,7 @@
     var isLocalFast = shareResult.mode === 'local-fast'
     var qrTitle = isDirectFallback || isDirectProcessing || isLocalFast ? '掃碼開啟影片連結' : '掃碼觀看影片'
     var qrNote = '手機掃描後可觀看並下載。'
-    if (isLocalFast) qrNote = '本機快速 QR，不需上傳；掃碼會開啟含下載 MP4 按鈕的手機頁。'
+    if (isLocalFast) qrNote = '本機快速 QR，不需上傳；掃碼會開啟下載 MP4 與分享通訊APP頁。'
     if (isDirectProcessing) qrNote = '已先顯示影片直連 QR，正在建立一次性連結。'
     if (isDirectFallback) qrNote = '一次性 API 暫時失敗，已先顯示影片直連 QR。'
 

@@ -74,6 +74,7 @@ public class UpdateBridge {
     private static final String[] VIDEO_EXTENSIONS = {
             ".mp4", ".m4v", ".mov", ".ts", ".mts", ".m2ts"
     };
+    private static final String CLOUD_HOME_URL = "https://sylong7708.github.io/shen-yue-iphone-assistant/";
 
     private final Activity activity;
     private final PackageManager packageManager;
@@ -515,15 +516,17 @@ public class UpdateBridge {
             String downloadName = phoneSaveFileName(share.fileName, share.mimeType);
             String encodedDownloadName = URLEncoder.encode(downloadName, "UTF-8").replace("+", "%20");
             String baseUrl = "http://" + host + ":" + port;
-            String watchUrl = baseUrl + "/local-watch/" + token;
+            String localWatchUrl = baseUrl + "/local-watch/" + token;
             String originalUrl = baseUrl + "/local-video/" + token + "/" + encodedName;
             String playUrl = baseUrl + "/local-play/" + token + "/" + encodedDownloadName;
             String downloadUrl = baseUrl + "/local-download/" + token + "/" + encodedDownloadName;
+            String watchUrl = buildCloudWatchUrl(token, downloadName, "video/mp4", share.size, downloadUrl, originalUrl, localWatchUrl);
             result.put("ok", true);
             result.put("mode", "local-fast");
             result.put("publicUrl", watchUrl);
             result.put("url", watchUrl);
             result.put("watchUrl", watchUrl);
+            result.put("localWatchUrl", localWatchUrl);
             result.put("videoUrl", playUrl);
             result.put("downloadUrl", downloadUrl);
             result.put("originalUrl", originalUrl);
@@ -553,6 +556,30 @@ public class UpdateBridge {
     private String normalizedVideoName(String fileName) {
         String name = fileName == null ? "" : fileName.trim();
         return name.length() == 0 ? "replay-video.mp4" : name;
+    }
+
+    private String buildCloudWatchUrl(
+            String token,
+            String fileName,
+            String mimeType,
+            long size,
+            String downloadUrl,
+            String originalUrl,
+            String localWatchUrl
+    ) throws Exception {
+        String home = BuildConfig.HOME_URL == null ? "" : BuildConfig.HOME_URL.trim();
+        if (!home.startsWith("https://")) home = CLOUD_HOME_URL;
+        if (!home.endsWith("/")) home = home + "/";
+        return home
+                + "replay-center/watch/?v=" + urlEncode(downloadUrl)
+                + "&n=" + urlEncode(fileName)
+                + "&m=" + urlEncode(mimeType == null || mimeType.length() == 0 ? "video/mp4" : mimeType)
+                + "&s=" + urlEncode(String.valueOf(size))
+                + "&uid=" + urlEncode(token)
+                + "&source=" + urlEncode("local-fast")
+                + "&original=" + urlEncode(originalUrl)
+                + "&fallback=" + urlEncode(localWatchUrl)
+                + "&download=1";
     }
 
     private boolean needsPhoneSaveRemux(String fileName, String mimeType) {
@@ -1680,7 +1707,6 @@ public class UpdateBridge {
         String originalName = normalizedVideoName(share.fileName);
         String saveName = phoneSaveFileName(share.fileName, share.mimeType);
         String originalUrl = "/local-video/" + share.token + "/" + urlEncode(originalName);
-        String playUrl = "/local-play/" + share.token + "/" + urlEncode(saveName);
         String downloadUrl = "/local-download/" + share.token + "/" + urlEncode(saveName);
         String conversionText = needsPhoneSaveRemux(share.fileName, share.mimeType)
                 ? "第一次播放或下載會自動轉成 MP4，請等待轉檔完成。"
@@ -1694,7 +1720,6 @@ public class UpdateBridge {
                 .append("body{margin:0;background:#080f14;color:#eef5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}")
                 .append("main{max-width:760px;margin:0 auto;padding:22px 16px 34px;}")
                 .append("h1{font-size:22px;line-height:1.35;margin:0 0 14px;word-break:break-word;}")
-                .append("video{width:100%;max-height:70vh;background:#000;border-radius:8px;display:block;}")
                 .append(".actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}")
                 .append("a{color:#69d5ff;}")
                 .append(".button{appearance:none;border:0;border-radius:8px;padding:13px 16px;background:#26343c;color:#fff;text-decoration:none;font-weight:700;}")
@@ -1702,16 +1727,28 @@ public class UpdateBridge {
                 .append(".note{color:#aebbc2;font-size:14px;line-height:1.55;margin-top:14px;}")
                 .append("</style></head><body><main>")
                 .append("<h1>").append(htmlEscape(saveName)).append("</h1>")
-                .append("<video controls playsinline webkit-playsinline preload=\"metadata\" src=\"")
-                .append(htmlEscape(playUrl))
-                .append("\"></video><div class=\"actions\"><a class=\"button primary\" href=\"")
+                .append("<p class=\"note\">此頁不播放影片，只提供下載或分享。</p>")
+                .append("<div class=\"actions\"><a id=\"download\" class=\"button primary\" href=\"")
                 .append(htmlEscape(downloadUrl))
                 .append("\" download=\"").append(htmlEscape(saveName)).append("\">下載 MP4</a>")
-                .append("<a class=\"button\" href=\"").append(htmlEscape(playUrl)).append("\">直接播放</a>")
+                .append("<button id=\"share\" class=\"button\" type=\"button\">分享通訊APP</button>")
+                .append("<a class=\"button\" href=\"https://line.me/R/msg/text/?")
+                .append(urlEncode(saveName + "\n" + downloadUrl))
+                .append("\">LINE</a>")
+                .append("<button id=\"copy\" class=\"button\" type=\"button\">複製連結</button>")
                 .append("</div><p class=\"note\">").append(htmlEscape(conversionText))
                 .append("<br>手機需與車機在同一個 Wi-Fi 或熱點網路。</p>")
                 .append("<p class=\"note\"><a href=\"").append(htmlEscape(originalUrl)).append("\">原始檔備援連結</a></p>")
-                .append("</main></body></html>");
+                .append("<script>")
+                .append("const u='").append(jsStringEscape(downloadUrl)).append("';")
+                .append("const n='").append(jsStringEscape(saveName)).append("';")
+                .append("document.getElementById('share').onclick=async()=>{")
+                .append("if(navigator.share){await navigator.share({title:n,text:n,url:u});return;}")
+                .append("prompt('請複製下載連結',u);};")
+                .append("document.getElementById('copy').onclick=async()=>{")
+                .append("try{await navigator.clipboard.writeText(u);alert('已複製下載連結');}")
+                .append("catch(e){prompt('請複製下載連結',u);}};")
+                .append("</script></main></body></html>");
 
         writeHttpBody(output, "200 OK", "text/html; charset=utf-8", html.toString(), "HEAD".equalsIgnoreCase(method));
     }
@@ -1812,6 +1849,15 @@ public class UpdateBridge {
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;")
                 .replace("'", "&#39;");
+    }
+
+    private String jsStringEscape(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\r", "\\r")
+                .replace("\n", "\\n")
+                .replace("</", "<\\/");
     }
 
     private void writeRangeNotSatisfiable(OutputStream output, long size) throws Exception {

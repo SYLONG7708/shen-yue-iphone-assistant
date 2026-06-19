@@ -87,7 +87,7 @@
       }
       .actions {
         display: grid;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 10px;
         margin-top: 14px;
       }
@@ -150,23 +150,23 @@
     <main>
       <header>
         <h1>回放中心</h1>
-        <p id="subtitle">手機觀看與下載頁</p>
+        <p id="subtitle">手機下載與分享頁</p>
       </header>
       <section>
         <p id="fileName">讀取影片中...</p>
-        <video id="player" controls playsinline webkit-playsinline preload="metadata" crossorigin="anonymous"></video>
+        <video id="player" class="hidden" preload="none" aria-hidden="true"></video>
         <div class="meta" id="meta">
           <div class="meta-row"><span>核對碼</span><strong class="value" id="uidText">-</strong></div>
           <div class="meta-row"><span>檔案大小</span><strong class="value" id="sizeText">-</strong></div>
-          <div class="meta-row"><span>播放格式</span><strong class="value" id="formatText">-</strong></div>
-          <div class="meta-row"><span>播放狀態</span><strong class="value" id="stateText">-</strong></div>
-          <div class="meta-row"><span>影片來源</span><strong class="value" id="sourceText">-</strong></div>
+          <div class="meta-row"><span>檔案格式</span><strong class="value" id="formatText">-</strong></div>
+          <div class="meta-row"><span>頁面狀態</span><strong class="value" id="stateText">-</strong></div>
+          <div class="meta-row"><span>下載來源</span><strong class="value" id="sourceText">-</strong></div>
         </div>
         <div class="actions">
-          <button type="button" id="download" class="primary">下載影片</button>
-          <a id="openDirect" href="#" target="_blank" rel="noopener">原始影片</a>
-          <button type="button" id="externalPlayer">外部播放器</button>
-          <button type="button" id="share">分享</button>
+          <a id="download" class="primary" href="#" target="_blank" rel="noopener" download>下載 MP4</a>
+          <a id="openDirect" class="hidden" href="#" target="_blank" rel="noopener">原始影片</a>
+          <button type="button" id="externalPlayer" class="hidden">外部播放器</button>
+          <button type="button" id="share">分享通訊APP</button>
           <button type="button" id="lineShare">LINE</button>
           <button type="button" id="copy">複製連結</button>
         </div>
@@ -329,10 +329,10 @@
       }
 
       function setControlsVisible(visible) {
-        player.classList.toggle("hidden", !visible);
+        player.classList.add("hidden");
         download.classList.toggle("hidden", !visible);
-        openDirect.classList.toggle("hidden", !visible);
-        externalPlayer.classList.toggle("hidden", !visible);
+        openDirect.classList.add("hidden");
+        externalPlayer.classList.add("hidden");
         share.classList.toggle("hidden", !visible);
         lineShare.classList.toggle("hidden", !visible);
         copy.classList.toggle("hidden", !visible);
@@ -465,7 +465,6 @@
         const extension = extensionFrom(rawExt || name || video);
         const mime = mimeFrom(extension, rawMime);
         const allowDownload = (firstValue("download") || "1") !== "0";
-        const shouldReloadVideo = currentVideo !== video || currentMime !== mime || player.currentSrc !== video;
 
         currentVideo = video;
         currentName = name;
@@ -476,9 +475,9 @@
         sizeText.textContent = formatBytes(size);
         formatText.textContent = `${FORMAT_LABELS[extension] || extension.toUpperCase() || "未知"} / ${mime}`;
         sourceText.textContent = video || "-";
-        subtitle.textContent = "手機觀看與下載頁";
+        subtitle.textContent = "手機下載與分享頁";
         hideNotice();
-        updateDiagnostics(mime, extension);
+        diagnostics.classList.add("hidden");
 
         if (!video || !isHttpVideoUrl(video)) {
           subtitle.textContent = "影片連結不存在";
@@ -489,8 +488,10 @@
 
         setControlsVisible(true);
         download.classList.toggle("hidden", !allowDownload);
+        download.href = video;
+        download.download = name || "replay-video.mp4";
         openDirect.href = video;
-        if (shouldReloadVideo) void forceLoadVideo(video, mime, extension);
+        setState("已準備下載或分享");
       }
 
       player.addEventListener("loadedmetadata", () => {
@@ -503,31 +504,9 @@
       player.addEventListener("stalled", () => showNotice("影片讀取暫停，正在等待網路或雲端回應。", "warn"));
       player.addEventListener("error", () => showPlaybackFailure(playbackErrorMessage()));
 
-      download.addEventListener("click", async () => {
+      download.addEventListener("click", () => {
         if (!currentVideo) return;
-        const originalText = download.textContent;
-        download.disabled = true;
-        download.textContent = "準備下載...";
-        try {
-          const response = await fetch(currentVideo, { mode: "cors", cache: "no-store" });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const blob = await response.blob();
-          const blobUrl = URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.href = blobUrl;
-          link.download = currentName || "replay-video.mp4";
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-          showNotice("已送出下載。若 LINE 或 iOS 內建瀏覽器沒有存檔，請點「原始影片」後用瀏覽器分享或儲存。");
-        } catch (error) {
-          window.open(currentVideo, "_blank", "noopener");
-          showNotice("此瀏覽器限制直接下載，已開啟原始影片；請用瀏覽器選單儲存或分享。", "warn");
-        } finally {
-          download.disabled = false;
-          download.textContent = originalText;
-        }
+        showNotice("已開啟下載。若通訊軟體內建瀏覽器無法保存，請用右上角選單改用系統瀏覽器開啟。");
       });
 
       externalPlayer.addEventListener("click", () => {
