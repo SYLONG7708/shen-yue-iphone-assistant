@@ -34,22 +34,30 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -69,9 +77,14 @@ public class UpdateBridge {
     private final Activity activity;
     private final PackageManager packageManager;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService localVideoExecutor = Executors.newCachedThreadPool();
     private final ConcurrentHashMap<String, UpdateTask> tasks = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, VideoPrepareTask> videoPrepareTasks = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, VideoUploadTask> videoUploadTasks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, LocalVideoShare> localVideoShares = new ConcurrentHashMap<>();
+    private final Object localVideoServerLock = new Object();
+    private volatile ServerSocket localVideoServer;
+    private volatile Thread localVideoServerThread;
     private volatile Uri lastSelectedFileUri;
 
     UpdateBridge(Activity activity) {
@@ -444,6 +457,82 @@ public class UpdateBridge {
             return "{\"ok\":false,\"message\":\"Video upload task was not found.\"}";
         }
         return task.toJson().toString();
+    }
+
+    @JavascriptInterface
+    public String createLocalVideoShare(String source, String fileName, String mimeType) {
+        return createLocalVideoShareInternal(source, fileName, mimeType);
+    }
+
+    @JavascriptInterface
+    public String createLastSelectedVideoShare(String fileName, String mimeType) {
+        Uri uri = lastSelectedFileUri;
+        if (uri == null) {
+            JSONObject result = new JSONObject();
+            try {
+                result.put("ok", false);
+                result.put("message", "找不到剛剛選取的影片 URI。");
+            } catch (JSONException ignored) {
+                // JSON error while reporting another error.
+            }
+            return result.toString();
+        }
+        return createLocalVideoShareInternal(uri.toString(), fileName, mimeType);
+    }
+
+    private String createLocalVideoShareInternal(String source, String fileName, String mimeType) {
+        JSONObject result = new JSONObject();
+        VideoInput video = null;
+        try {
+            String safeSource = source == null ? "" : source.trim();
+            if (safeSource.length() == 0) {
+                result.put("ok", false);
+                result.put("message", "沒有選擇本機影片。");
+                return result.toString();
+            }
+
+            int port = ensureLocalVideoServer();
+            String host = getLocalNetworkAddress();
+            if (host.length() == 0) {
+                result.put("ok", false);
+                result.put("message", "找不到車機區域網路 IP，請確認手機與車機在同一 Wi-Fi。");
+                return result.toString();
+            }
+
+            video = openVideoInput(safeSource, fileName, mimeType, false);
+            String token = UUID.randomUUID().toString().replace("-", "");
+            LocalVideoShare share = new LocalVideoShare(
+                    token,
+                    safeSource,
+                    video.fileName,
+                    video.mimeType,
+                    video.size,
+                    System.currentTimeMillis() + 2L * 60L * 60L * 1000L
+            );
+            localVideoShares.put(token, share);
+            String encodedName = URLEncoder.encode(share.fileName, "UTF-8").replace("+", "%20");
+            String url = "http://" + host + ":" + port + "/local-video/" + token + "/" + encodedName;
+            result.put("ok", true);
+            result.put("mode", "local-fast");
+            result.put("publicUrl", url);
+            result.put("url", url);
+            result.put("watchUrl", url);
+            result.put("fileName", share.fileName);
+            result.put("mimeType", share.mimeType);
+            result.put("size", share.size);
+            result.put("ttlMinutes", 120);
+        } catch (Exception error) {
+            putError(result, error);
+        } finally {
+            if (video != null) {
+                try {
+                    video.input.close();
+                } catch (Exception ignored) {
+                    // Closing best effort.
+                }
+            }
+        }
+        return result.toString();
     }
 
     private String uploadLocalVideoAsyncInternal(String source, String fileName, String mimeType, String endpoint, String mode, String token, boolean remuxTransportStreams) {
@@ -1388,6 +1477,250 @@ public class UpdateBridge {
         }
     }
 
+    private int ensureLocalVideoServer() throws Exception {
+        synchronized (localVideoServerLock) {
+            if (localVideoServer != null && !localVideoServer.isClosed()) {
+                return localVideoServer.getLocalPort();
+            }
+
+            localVideoServer = new ServerSocket(0);
+            localVideoServerThread = new Thread(() -> {
+                while (localVideoServer != null && !localVideoServer.isClosed()) {
+                    try {
+                        Socket socket = localVideoServer.accept();
+                        localVideoExecutor.execute(() -> handleLocalVideoClient(socket));
+                    } catch (Exception ignored) {
+                        // Server is closing or a client failed before dispatch.
+                    }
+                }
+            }, "ShenYueLocalVideoServer");
+            localVideoServerThread.setDaemon(true);
+            localVideoServerThread.start();
+            return localVideoServer.getLocalPort();
+        }
+    }
+
+    private void handleLocalVideoClient(Socket socket) {
+        try (Socket client = socket) {
+            client.setSoTimeout(120000);
+            InputStream input = client.getInputStream();
+            BufferedOutputStream output = new BufferedOutputStream(client.getOutputStream());
+            String request = readHttpRequest(input);
+            if (request.length() == 0) return;
+
+            String[] lines = request.split("\\r?\\n");
+            String[] first = lines[0].split(" ");
+            if (first.length < 2) {
+                writeSimpleHttp(output, 400, "Bad Request", "text/plain; charset=utf-8", "Bad Request");
+                return;
+            }
+
+            String method = first[0];
+            if ("OPTIONS".equalsIgnoreCase(method)) {
+                writeOptions(output);
+                return;
+            }
+            if (!"GET".equalsIgnoreCase(method) && !"HEAD".equalsIgnoreCase(method)) {
+                writeSimpleHttp(output, 405, "Method Not Allowed", "text/plain; charset=utf-8", "Method Not Allowed");
+                return;
+            }
+
+            String path = first[1];
+            String prefix = "/local-video/";
+            if (!path.startsWith(prefix)) {
+                writeSimpleHttp(output, 404, "Not Found", "text/plain; charset=utf-8", "Not Found");
+                return;
+            }
+            String tokenPart = path.substring(prefix.length());
+            int slash = tokenPart.indexOf('/');
+            String token = slash >= 0 ? tokenPart.substring(0, slash) : tokenPart;
+            int query = token.indexOf('?');
+            if (query >= 0) token = token.substring(0, query);
+
+            LocalVideoShare share = localVideoShares.get(token);
+            if (share == null || share.expiresAt < System.currentTimeMillis()) {
+                if (share != null) localVideoShares.remove(token);
+                writeSimpleHttp(output, 404, "Not Found", "text/plain; charset=utf-8", "影片連結已失效。");
+                return;
+            }
+
+            String rangeHeader = findHeader(lines, "Range");
+            serveLocalVideo(output, method, share, rangeHeader);
+        } catch (Exception ignored) {
+            // Client disconnected or requested an invalid range.
+        }
+    }
+
+    private String readHttpRequest(InputStream input) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[1024];
+        int matched = 0;
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            for (int i = 0; i < read; i++) {
+                byte value = buffer[i];
+                output.write(value);
+                if ((matched == 0 && value == '\r')
+                        || (matched == 1 && value == '\n')
+                        || (matched == 2 && value == '\r')
+                        || (matched == 3 && value == '\n')) {
+                    matched += 1;
+                    if (matched == 4) return output.toString("UTF-8");
+                } else {
+                    matched = value == '\r' ? 1 : 0;
+                }
+                if (output.size() > 8192) return output.toString("UTF-8");
+            }
+        }
+        return output.toString("UTF-8");
+    }
+
+    private String findHeader(String[] lines, String name) {
+        String prefix = name.toLowerCase(Locale.US) + ":";
+        for (String line : lines) {
+            String value = line == null ? "" : line.trim();
+            if (value.toLowerCase(Locale.US).startsWith(prefix)) {
+                return value.substring(prefix.length()).trim();
+            }
+        }
+        return "";
+    }
+
+    private void serveLocalVideo(OutputStream output, String method, LocalVideoShare share, String rangeHeader) throws Exception {
+        VideoInput video = null;
+        try {
+            video = openVideoInput(share.source, share.fileName, share.mimeType, false);
+            long size = video.size >= 0L ? video.size : share.size;
+            long start = 0L;
+            long end = size > 0L ? size - 1L : -1L;
+            boolean partial = false;
+
+            if (size > 0L && rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+                String range = rangeHeader.substring("bytes=".length());
+                int dash = range.indexOf('-');
+                if (dash >= 0) {
+                    String startText = range.substring(0, dash).trim();
+                    String endText = range.substring(dash + 1).trim();
+                    if (startText.length() > 0) start = Long.parseLong(startText);
+                    if (endText.length() > 0) end = Math.min(size - 1L, Long.parseLong(endText));
+                    if (start < 0L || start >= size || end < start) {
+                        writeRangeNotSatisfiable(output, size);
+                        return;
+                    }
+                    partial = true;
+                }
+            }
+
+            long length = size > 0L ? end - start + 1L : -1L;
+            StringBuilder headers = new StringBuilder();
+            headers.append(partial ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 OK\r\n");
+            headers.append("Content-Type: ").append(video.mimeType).append("\r\n");
+            headers.append("Accept-Ranges: bytes\r\n");
+            headers.append("Access-Control-Allow-Origin: *\r\n");
+            headers.append("Cache-Control: no-store\r\n");
+            headers.append("Connection: close\r\n");
+            headers.append("Content-Disposition: inline; filename=\"").append(video.fileName.replace("\"", "_")).append("\"\r\n");
+            if (length >= 0L) headers.append("Content-Length: ").append(length).append("\r\n");
+            if (partial) headers.append("Content-Range: bytes ").append(start).append("-").append(end).append("/").append(size).append("\r\n");
+            headers.append("\r\n");
+            output.write(headers.toString().getBytes("UTF-8"));
+            if (!"HEAD".equalsIgnoreCase(method)) {
+                skipFully(video.input, start);
+                copyRange(video.input, output, length);
+            }
+            output.flush();
+        } finally {
+            if (video != null) {
+                try {
+                    video.input.close();
+                } catch (Exception ignored) {
+                    // Closing best effort.
+                }
+            }
+        }
+    }
+
+    private void writeRangeNotSatisfiable(OutputStream output, long size) throws Exception {
+        String headers = "HTTP/1.1 416 Range Not Satisfiable\r\n"
+                + "Content-Range: bytes */" + size + "\r\n"
+                + "Access-Control-Allow-Origin: *\r\n"
+                + "Connection: close\r\n\r\n";
+        output.write(headers.getBytes("UTF-8"));
+        output.flush();
+    }
+
+    private void writeOptions(OutputStream output) throws Exception {
+        String headers = "HTTP/1.1 204 No Content\r\n"
+                + "Access-Control-Allow-Origin: *\r\n"
+                + "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n"
+                + "Access-Control-Allow-Headers: Range, Content-Type\r\n"
+                + "Access-Control-Max-Age: 86400\r\n"
+                + "Connection: close\r\n\r\n";
+        output.write(headers.getBytes("UTF-8"));
+        output.flush();
+    }
+
+    private void writeSimpleHttp(OutputStream output, int code, String status, String contentType, String body) throws Exception {
+        byte[] bodyBytes = body.getBytes("UTF-8");
+        String headers = "HTTP/1.1 " + code + " " + status + "\r\n"
+                + "Content-Type: " + contentType + "\r\n"
+                + "Content-Length: " + bodyBytes.length + "\r\n"
+                + "Access-Control-Allow-Origin: *\r\n"
+                + "Connection: close\r\n\r\n";
+        output.write(headers.getBytes("UTF-8"));
+        output.write(bodyBytes);
+        output.flush();
+    }
+
+    private void skipFully(InputStream input, long bytes) throws Exception {
+        long remaining = bytes;
+        while (remaining > 0L) {
+            long skipped = input.skip(remaining);
+            if (skipped <= 0L) {
+                if (input.read() == -1) return;
+                skipped = 1L;
+            }
+            remaining -= skipped;
+        }
+    }
+
+    private void copyRange(InputStream input, OutputStream output, long length) throws Exception {
+        byte[] buffer = new byte[FAST_UPLOAD_BUFFER_SIZE];
+        if (length < 0L) {
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+            return;
+        }
+
+        long remaining = length;
+        while (remaining > 0L) {
+            int read = input.read(buffer, 0, (int) Math.min(buffer.length, remaining));
+            if (read == -1) return;
+            output.write(buffer, 0, read);
+            remaining -= read;
+        }
+    }
+
+    private String getLocalNetworkAddress() {
+        try {
+            List<NetworkInterface> interfaces = Collections.list(NetworkInterface.getNetworkInterfaces());
+            for (NetworkInterface networkInterface : interfaces) {
+                if (!networkInterface.isUp() || networkInterface.isLoopback()) continue;
+                List<InetAddress> addresses = Collections.list(networkInterface.getInetAddresses());
+                for (InetAddress address : addresses) {
+                    if (address instanceof Inet4Address && !address.isLoopbackAddress() && !address.isLinkLocalAddress()) {
+                        return address.getHostAddress();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // Fallback below.
+        }
+        return "";
+    }
+
     private String resolveUploadEndpoint(String endpoint, String fileName) throws Exception {
         String encoded = URLEncoder.encode(fileName == null ? "replay-video.mp4" : fileName, "UTF-8").replace("+", "%20");
         return endpoint.replace("{filename}", encoded);
@@ -1813,6 +2146,24 @@ public class UpdateBridge {
                 // In-memory values are simple strings and numbers.
             }
             return object;
+        }
+    }
+
+    private static class LocalVideoShare {
+        final String token;
+        final String source;
+        final String fileName;
+        final String mimeType;
+        final long size;
+        final long expiresAt;
+
+        LocalVideoShare(String token, String source, String fileName, String mimeType, long size, long expiresAt) {
+            this.token = token;
+            this.source = source;
+            this.fileName = fileName;
+            this.mimeType = mimeType;
+            this.size = size;
+            this.expiresAt = expiresAt;
         }
     }
 

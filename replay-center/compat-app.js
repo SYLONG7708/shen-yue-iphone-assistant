@@ -227,6 +227,13 @@
     )
   }
 
+  function canCreateFastLocalShare() {
+    if (!window.ShenYueUpdater) return false
+    if (selectedNativeVideo && typeof window.ShenYueUpdater.createLocalVideoShare === 'function') return true
+    if (selectedFile && typeof window.ShenYueUpdater.createLastSelectedVideoShare === 'function') return true
+    return false
+  }
+
   function isTransportStreamVideo(item) {
     if (!item) return false
     return /\.(ts|mts|m2ts)$/i.test(item.name || '') || /video\/(mp2t|mpeg|mpeg2)/i.test(item.mimeType || '')
@@ -570,6 +577,10 @@
     setProgress(6)
     setStatus('busy', '正在上傳影片，請保持網路連線。')
 
+    if (tryCreateFastLocalShare()) {
+      return
+    }
+
     if (selectedNativeVideo) {
       uploadNativeVideoAndCreateShare()
       return
@@ -584,6 +595,50 @@
 
       finishUploadedVideo(uploadResult)
     })
+  }
+
+  function tryCreateFastLocalShare() {
+    if (!canCreateFastLocalShare()) return false
+    setProgress(10)
+    setStatus('busy', '正在建立本機快速 QR，不需先上傳影片。')
+    var result
+    if (selectedNativeVideo) {
+      result = parseNativeResult(
+        window.ShenYueUpdater.createLocalVideoShare(
+          selectedNativeVideo.uploadUri || selectedNativeVideo.uri || '',
+          selectedNativeVideo.uploadName || selectedNativeVideo.name || 'replay-video.mp4',
+          selectedNativeVideo.uploadMimeType || selectedNativeVideo.mimeType || 'video/mp4'
+        )
+      )
+    } else {
+      result = parseNativeResult(
+        window.ShenYueUpdater.createLastSelectedVideoShare(
+          selectedFile.name || 'replay-video.mp4',
+          selectedFile.type || guessNativeMimeType(selectedFile.name)
+        )
+      )
+    }
+
+    if (!result.ok) {
+      setProgress(6)
+      setStatus('busy', '本機快速 QR 建立失敗，改用雲端上傳：' + escapeHtml(result.message || '未知錯誤'))
+      return false
+    }
+
+    setProgress(100)
+    el.uploadButton.disabled = false
+    showShare(
+      {
+        watchUrl: result.watchUrl || result.publicUrl || result.url,
+        mode: 'local-fast',
+      },
+      result.publicUrl || result.url || result.watchUrl
+    )
+    el.resultBox.innerHTML =
+      '本機快速 QR：<br><strong>' +
+      escapeHtml(result.publicUrl || result.url || result.watchUrl) +
+      '</strong><br><br>手機需與車機在同一個 Wi-Fi / 熱點網路。'
+    return true
   }
 
   function finishUploadedVideo(uploadResult) {
@@ -778,8 +833,10 @@
     lastWatchUrl = watchUrl
     var isDirectFallback = shareResult.mode === 'direct-fallback'
     var isDirectProcessing = shareResult.mode === 'direct-processing'
-    var qrTitle = isDirectFallback || isDirectProcessing ? '掃碼開啟影片連結' : '掃碼觀看影片'
+    var isLocalFast = shareResult.mode === 'local-fast'
+    var qrTitle = isDirectFallback || isDirectProcessing || isLocalFast ? '掃碼開啟影片連結' : '掃碼觀看影片'
     var qrNote = '手機掃描後可觀看並下載。'
+    if (isLocalFast) qrNote = '本機快速 QR，不需上傳；手機需與車機在同一 Wi-Fi / 熱點。'
     if (isDirectProcessing) qrNote = '已先顯示影片直連 QR，正在建立一次性連結。'
     if (isDirectFallback) qrNote = '一次性 API 暫時失敗，已先顯示影片直連 QR。'
 
@@ -811,6 +868,10 @@
     }
     if (isDirectProcessing) {
       setStatus('ready', '影片已上傳，已先產生影片直連 QR。')
+      return
+    }
+    if (isLocalFast) {
+      setStatus('ready', '已建立本機快速 QR：不需上傳影片，手機和車機需在同一 Wi-Fi / 熱點。')
       return
     }
     setStatus('ready', '完整流程完成：影片已上傳，並已產生一次性 QR。')
