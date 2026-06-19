@@ -20,6 +20,7 @@ import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.net.Uri;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Environment;
 import android.provider.OpenableColumns;
@@ -1717,6 +1718,24 @@ public class UpdateBridge {
             }
         } catch (Exception ignored) {
             // Fallback below.
+        }
+        try {
+            WifiManager wifi = (WifiManager) activity.getApplicationContext().getSystemService(Activity.WIFI_SERVICE);
+            if (wifi != null && wifi.getConnectionInfo() != null) {
+                int ip = wifi.getConnectionInfo().getIpAddress();
+                if (ip != 0) {
+                    return String.format(
+                            Locale.US,
+                            "%d.%d.%d.%d",
+                            ip & 0xff,
+                            (ip >> 8) & 0xff,
+                            (ip >> 16) & 0xff,
+                            (ip >> 24) & 0xff
+                    );
+                }
+            }
+        } catch (Exception ignored) {
+            // No Wi-Fi IP available.
         }
         return "";
     }

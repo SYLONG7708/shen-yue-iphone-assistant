@@ -565,19 +565,20 @@
       return
     }
 
-    var endpoint = el.endpointInput.value
-    if (!endpoint) {
-      setStatus('error', '請填入上傳 API。')
-      return
-    }
-
     saveSettings()
     el.uploadButton.disabled = true
     el.shareButton.disabled = true
     setProgress(6)
-    setStatus('busy', '正在上傳影片，請保持網路連線。')
+    setStatus('busy', '正在建立本機快速 QR，不先上傳影片。')
 
     if (tryCreateFastLocalShare()) {
+      return
+    }
+
+    var endpoint = el.endpointInput.value
+    if (!endpoint) {
+      el.uploadButton.disabled = false
+      setStatus('error', '本機快速 QR 不可用，且沒有填入雲端上傳 API。')
       return
     }
 
@@ -620,9 +621,16 @@
     }
 
     if (!result.ok) {
-      setProgress(6)
-      setStatus('busy', '本機快速 QR 建立失敗，改用雲端上傳：' + escapeHtml(result.message || '未知錯誤'))
-      return false
+      setProgress(0)
+      el.uploadButton.disabled = false
+      el.shareButton.disabled = true
+      resetQr()
+      el.resultBox.innerHTML =
+        '本機快速 QR 建立失敗：<br><strong>' +
+        escapeHtml(result.message || '未知錯誤') +
+        '</strong><br><br>已停止雲端上傳，避免再次卡在 2%。請確認手機與車機連在同一個 Wi-Fi / 熱點後重選影片。'
+      setStatus('error', '本機快速 QR 建立失敗，已停止雲端上傳避免卡在 2%：' + escapeHtml(result.message || '未知錯誤'))
+      return true
     }
 
     setProgress(100)

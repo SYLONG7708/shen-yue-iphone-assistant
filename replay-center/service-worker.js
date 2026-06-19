@@ -1,4 +1,4 @@
-const CACHE_NAME = 'replay-center-v11-local-fast'
+const CACHE_NAME = 'replay-center-v12-local-fast-no-fallback'
 const STATIC_ASSETS = ['/', '/remote-config.json', '/manifest.webmanifest', '/favicon.svg']
 
 self.addEventListener('install', (event) => {
