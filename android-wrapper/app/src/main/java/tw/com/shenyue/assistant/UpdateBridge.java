@@ -72,7 +72,7 @@ public class UpdateBridge {
     private static final int FAST_UPLOAD_BUFFER_SIZE = 256 * 1024;
     private static final long UPLOAD_PROGRESS_INTERVAL_MS = 180L;
     private static final String[] VIDEO_EXTENSIONS = {
-            ".mp4", ".ts", ".mts", ".m2ts"
+            ".mp4", ".m4v", ".mov", ".ts", ".mts", ".m2ts"
     };
 
     private final Activity activity;
@@ -512,12 +512,21 @@ public class UpdateBridge {
             );
             localVideoShares.put(token, share);
             String encodedName = URLEncoder.encode(share.fileName, "UTF-8").replace("+", "%20");
-            String url = "http://" + host + ":" + port + "/local-video/" + token + "/" + encodedName;
+            String downloadName = phoneSaveFileName(share.fileName, share.mimeType);
+            String encodedDownloadName = URLEncoder.encode(downloadName, "UTF-8").replace("+", "%20");
+            String baseUrl = "http://" + host + ":" + port;
+            String watchUrl = baseUrl + "/local-watch/" + token;
+            String originalUrl = baseUrl + "/local-video/" + token + "/" + encodedName;
+            String playUrl = baseUrl + "/local-play/" + token + "/" + encodedDownloadName;
+            String downloadUrl = baseUrl + "/local-download/" + token + "/" + encodedDownloadName;
             result.put("ok", true);
             result.put("mode", "local-fast");
-            result.put("publicUrl", url);
-            result.put("url", url);
-            result.put("watchUrl", url);
+            result.put("publicUrl", watchUrl);
+            result.put("url", watchUrl);
+            result.put("watchUrl", watchUrl);
+            result.put("videoUrl", playUrl);
+            result.put("downloadUrl", downloadUrl);
+            result.put("originalUrl", originalUrl);
             result.put("fileName", share.fileName);
             result.put("mimeType", share.mimeType);
             result.put("size", share.size);
@@ -534,6 +543,23 @@ public class UpdateBridge {
             }
         }
         return result.toString();
+    }
+
+    private String phoneSaveFileName(String fileName, String mimeType) {
+        String name = normalizedVideoName(fileName);
+        return needsPhoneSaveRemux(name, mimeType) ? toMp4FileName(name) : name;
+    }
+
+    private String normalizedVideoName(String fileName) {
+        String name = fileName == null ? "" : fileName.trim();
+        return name.length() == 0 ? "replay-video.mp4" : name;
+    }
+
+    private boolean needsPhoneSaveRemux(String fileName, String mimeType) {
+        return isTransportStreamName(fileName)
+                || isTransportStreamMime(mimeType)
+                || isQuickTimeName(fileName)
+                || isQuickTimeMime(mimeType);
     }
 
     private String uploadLocalVideoAsyncInternal(String source, String fileName, String mimeType, String endpoint, String mode, String token, boolean remuxTransportStreams) {
@@ -1033,7 +1059,7 @@ public class UpdateBridge {
             if (name.length() == 0) name = resolveContentName(uri);
             if (name.length() == 0) name = "replay-video.mp4";
             if (type.length() == 0) type = guessVideoMime(name);
-            if (isTransportStreamName(name) || isTransportStreamMime(type)) {
+            if (needsPhoneSaveRemux(name, type)) {
                 File cachedSource = copyContentVideoToCache(uri, name, task);
                 File mp4File = remuxTransportStreamToMp4(cachedSource, name, task);
                 return new PreparedVideo(Uri.fromFile(mp4File).toString(), toMp4FileName(name), "video/mp4", mp4File.length(), true);
@@ -1053,7 +1079,7 @@ public class UpdateBridge {
         }
         if (name.length() == 0) name = file.getName();
         if (type.length() == 0) type = guessVideoMime(name);
-        if (isTransportStreamName(file.getName()) || (isTransportStreamName(name) && isTransportStreamMime(type))) {
+        if (needsPhoneSaveRemux(name, type) || needsPhoneSaveRemux(file.getName(), type)) {
             File mp4File = remuxTransportStreamToMp4(file, name, task);
             return new PreparedVideo(Uri.fromFile(mp4File).toString(), toMp4FileName(name), "video/mp4", mp4File.length(), true);
         }
@@ -1104,7 +1130,7 @@ public class UpdateBridge {
 
     private File remuxTransportStreamToMp4(File source, String displayName, VideoPrepareTask task) throws Exception {
         if (source == null || !source.exists() || !source.isFile()) {
-            throw new IllegalStateException("Transport stream source file was not found.");
+            throw new IllegalStateException("Video source file was not found.");
         }
 
         File dir = remuxCacheDir();
@@ -1150,7 +1176,7 @@ public class UpdateBridge {
             }
 
             if (!hasVideo || selectedTracks == 0) {
-                throw new IllegalStateException("No MP4-compatible video track was found in this TS file.");
+                throw new IllegalStateException("No MP4-compatible video track was found in this file.");
             }
 
             maxInputSize = Math.max(1024 * 1024, Math.min(maxInputSize, 32 * 1024 * 1024));
@@ -1161,7 +1187,7 @@ public class UpdateBridge {
             long writtenSamples = 0L;
             long lastProgressAt = 0L;
             if (task != null) {
-                task.message = "Converting TS to MP4...";
+                task.message = "Converting video to MP4...";
                 task.indeterminate = durationUs <= 0L;
                 task.progress = Math.max(task.progress, 20);
             }
@@ -1197,7 +1223,7 @@ public class UpdateBridge {
                 extractor.advance();
             }
             if (writtenSamples == 0L) {
-                throw new IllegalStateException("No playable samples were found in this TS file.");
+                throw new IllegalStateException("No playable samples were found in this file.");
             }
             muxer.stop();
             muxerStarted = false;
@@ -1210,7 +1236,7 @@ public class UpdateBridge {
                 //noinspection ResultOfMethodCallIgnored
                 output.delete();
             }
-            throw new IllegalStateException("Unable to prepare TS video as MP4: " + safeMessage(error), error);
+            throw new IllegalStateException("Unable to prepare video as MP4: " + safeMessage(error), error);
         } finally {
             if (muxer != null) {
                 try {
@@ -1265,6 +1291,16 @@ public class UpdateBridge {
                 || value.equals("video/mpeg")
                 || value.equals("video/mpeg2")
                 || value.equals("application/x-mpegurl");
+    }
+
+    private boolean isQuickTimeName(String fileName) {
+        String value = fileName == null ? "" : fileName.toLowerCase(Locale.US);
+        return value.endsWith(".mov");
+    }
+
+    private boolean isQuickTimeMime(String mimeType) {
+        String value = mimeType == null ? "" : mimeType.toLowerCase(Locale.US);
+        return value.equals("video/quicktime");
     }
 
     private boolean isSupportedMp4Track(String mimeType, boolean hasVideo, boolean hasAudio) {
@@ -1527,29 +1563,65 @@ public class UpdateBridge {
             }
 
             String path = first[1];
-            String prefix = "/local-video/";
-            if (!path.startsWith(prefix)) {
+            int pathQuery = path.indexOf('?');
+            if (pathQuery >= 0) path = path.substring(0, pathQuery);
+
+            boolean watchRequest = path.startsWith("/local-watch/");
+            boolean originalRequest = path.startsWith("/local-video/");
+            boolean playRequest = path.startsWith("/local-play/");
+            boolean downloadRequest = path.startsWith("/local-download/");
+            if (!watchRequest && !originalRequest && !playRequest && !downloadRequest) {
                 writeSimpleHttp(output, 404, "Not Found", "text/plain; charset=utf-8", "Not Found");
                 return;
             }
-            String tokenPart = path.substring(prefix.length());
-            int slash = tokenPart.indexOf('/');
-            String token = slash >= 0 ? tokenPart.substring(0, slash) : tokenPart;
-            int query = token.indexOf('?');
-            if (query >= 0) token = token.substring(0, query);
 
-            LocalVideoShare share = localVideoShares.get(token);
+            String prefix = watchRequest ? "/local-watch/"
+                    : originalRequest ? "/local-video/"
+                    : playRequest ? "/local-play/"
+                    : "/local-download/";
+            String token = tokenFromPath(path, prefix);
+
+            LocalVideoShare share = resolveLocalVideoShare(token);
             if (share == null || share.expiresAt < System.currentTimeMillis()) {
-                if (share != null) localVideoShares.remove(token);
                 writeSimpleHttp(output, 404, "Not Found", "text/plain; charset=utf-8", "影片連結已失效。");
                 return;
             }
 
             String rangeHeader = findHeader(lines, "Range");
-            serveLocalVideo(output, method, share, rangeHeader);
+            try {
+                if (watchRequest) {
+                    serveLocalWatchPage(output, method, share);
+                    return;
+                }
+                serveLocalVideo(output, method, share, rangeHeader, downloadRequest, playRequest || downloadRequest);
+            } catch (Exception error) {
+                writeSimpleHttp(
+                        output,
+                        500,
+                        "Internal Server Error",
+                        "text/plain; charset=utf-8",
+                        "影片轉檔或讀取失敗：" + safeMessage(error)
+                );
+            }
         } catch (Exception ignored) {
             // Client disconnected or requested an invalid range.
         }
+    }
+
+    private String tokenFromPath(String path, String prefix) {
+        String tokenPart = path.substring(prefix.length());
+        int slash = tokenPart.indexOf('/');
+        return slash >= 0 ? tokenPart.substring(0, slash) : tokenPart;
+    }
+
+    private LocalVideoShare resolveLocalVideoShare(String token) {
+        if (token == null || token.length() == 0) return null;
+        LocalVideoShare share = localVideoShares.get(token);
+        if (share != null && share.expiresAt < System.currentTimeMillis()) {
+            localVideoShares.remove(token);
+            return null;
+        }
+        return share;
     }
 
     private String readHttpRequest(InputStream input) throws Exception {
@@ -1587,10 +1659,76 @@ public class UpdateBridge {
         return "";
     }
 
-    private void serveLocalVideo(OutputStream output, String method, LocalVideoShare share, String rangeHeader) throws Exception {
+    private VideoInput openPhoneSaveVideoInput(LocalVideoShare share) throws Exception {
+        if (!needsPhoneSaveRemux(share.fileName, share.mimeType)) {
+            return openVideoInput(share.source, share.fileName, share.mimeType, false);
+        }
+
+        synchronized (share) {
+            if (share.phoneSource.length() == 0) {
+                PreparedVideo prepared = preparePlayableVideo(share.source, share.fileName, share.mimeType);
+                share.phoneSource = prepared.uri;
+                share.phoneFileName = prepared.fileName;
+                share.phoneMimeType = prepared.mimeType;
+                share.phoneSize = prepared.size;
+            }
+        }
+        return openVideoInput(share.phoneSource, share.phoneFileName, share.phoneMimeType, false);
+    }
+
+    private void serveLocalWatchPage(OutputStream output, String method, LocalVideoShare share) throws Exception {
+        String originalName = normalizedVideoName(share.fileName);
+        String saveName = phoneSaveFileName(share.fileName, share.mimeType);
+        String originalUrl = "/local-video/" + share.token + "/" + urlEncode(originalName);
+        String playUrl = "/local-play/" + share.token + "/" + urlEncode(saveName);
+        String downloadUrl = "/local-download/" + share.token + "/" + urlEncode(saveName);
+        String conversionText = needsPhoneSaveRemux(share.fileName, share.mimeType)
+                ? "第一次播放或下載會自動轉成 MP4，請等待轉檔完成。"
+                : "此影片會以手機可保存的下載檔提供。";
+
+        StringBuilder html = new StringBuilder();
+        html.append("<!doctype html><html lang=\"zh-Hant\"><head><meta charset=\"utf-8\">")
+                .append("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">")
+                .append("<title>").append(htmlEscape(saveName)).append("</title>")
+                .append("<style>")
+                .append("body{margin:0;background:#080f14;color:#eef5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}")
+                .append("main{max-width:760px;margin:0 auto;padding:22px 16px 34px;}")
+                .append("h1{font-size:22px;line-height:1.35;margin:0 0 14px;word-break:break-word;}")
+                .append("video{width:100%;max-height:70vh;background:#000;border-radius:8px;display:block;}")
+                .append(".actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}")
+                .append("a{color:#69d5ff;}")
+                .append(".button{appearance:none;border:0;border-radius:8px;padding:13px 16px;background:#26343c;color:#fff;text-decoration:none;font-weight:700;}")
+                .append(".primary{background:#e32942;}")
+                .append(".note{color:#aebbc2;font-size:14px;line-height:1.55;margin-top:14px;}")
+                .append("</style></head><body><main>")
+                .append("<h1>").append(htmlEscape(saveName)).append("</h1>")
+                .append("<video controls playsinline webkit-playsinline preload=\"metadata\" src=\"")
+                .append(htmlEscape(playUrl))
+                .append("\"></video><div class=\"actions\"><a class=\"button primary\" href=\"")
+                .append(htmlEscape(downloadUrl))
+                .append("\" download=\"").append(htmlEscape(saveName)).append("\">下載 MP4</a>")
+                .append("<a class=\"button\" href=\"").append(htmlEscape(playUrl)).append("\">直接播放</a>")
+                .append("</div><p class=\"note\">").append(htmlEscape(conversionText))
+                .append("<br>手機需與車機在同一個 Wi-Fi 或熱點網路。</p>")
+                .append("<p class=\"note\"><a href=\"").append(htmlEscape(originalUrl)).append("\">原始檔備援連結</a></p>")
+                .append("</main></body></html>");
+
+        writeHttpBody(output, "200 OK", "text/html; charset=utf-8", html.toString(), "HEAD".equalsIgnoreCase(method));
+    }
+
+    private void serveLocalVideo(
+            OutputStream output,
+            String method,
+            LocalVideoShare share,
+            String rangeHeader,
+            boolean attachment,
+            boolean phoneCompatible
+    ) throws Exception {
         VideoInput video = null;
         try {
-            video = openVideoInput(share.source, share.fileName, share.mimeType, false);
+            video = phoneCompatible
+                    ? openPhoneSaveVideoInput(share)
+                    : openVideoInput(share.source, share.fileName, share.mimeType, false);
             long size = video.size >= 0L ? video.size : share.size;
             long start = 0L;
             long end = size > 0L ? size - 1L : -1L;
@@ -1620,7 +1758,7 @@ public class UpdateBridge {
             headers.append("Access-Control-Allow-Origin: *\r\n");
             headers.append("Cache-Control: no-store\r\n");
             headers.append("Connection: close\r\n");
-            headers.append("Content-Disposition: inline; filename=\"").append(video.fileName.replace("\"", "_")).append("\"\r\n");
+            headers.append("Content-Disposition: ").append(contentDisposition(attachment, video.fileName)).append("\r\n");
             if (length >= 0L) headers.append("Content-Length: ").append(length).append("\r\n");
             if (partial) headers.append("Content-Range: bytes ").append(start).append("-").append(end).append("/").append(size).append("\r\n");
             headers.append("\r\n");
@@ -1639,6 +1777,41 @@ public class UpdateBridge {
                 }
             }
         }
+    }
+
+    private String contentDisposition(boolean attachment, String fileName) throws Exception {
+        String displayName = normalizedVideoName(fileName).replace("\r", "_").replace("\n", "_");
+        String fallbackName = safeFileName(displayName);
+        String encodedName = urlEncode(displayName);
+        return (attachment ? "attachment" : "inline")
+                + "; filename=\"" + fallbackName.replace("\"", "_") + "\""
+                + "; filename*=UTF-8''" + encodedName;
+    }
+
+    private String urlEncode(String value) throws Exception {
+        return URLEncoder.encode(value == null ? "" : value, "UTF-8").replace("+", "%20");
+    }
+
+    private void writeHttpBody(OutputStream output, String status, String contentType, String body, boolean headOnly) throws Exception {
+        byte[] bodyBytes = body.getBytes("UTF-8");
+        String headers = "HTTP/1.1 " + status + "\r\n"
+                + "Content-Type: " + contentType + "\r\n"
+                + "Content-Length: " + bodyBytes.length + "\r\n"
+                + "Access-Control-Allow-Origin: *\r\n"
+                + "Cache-Control: no-store\r\n"
+                + "Connection: close\r\n\r\n";
+        output.write(headers.getBytes("UTF-8"));
+        if (!headOnly) output.write(bodyBytes);
+        output.flush();
+    }
+
+    private String htmlEscape(String value) {
+        if (value == null) return "";
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 
     private void writeRangeNotSatisfiable(OutputStream output, long size) throws Exception {
@@ -2175,6 +2348,10 @@ public class UpdateBridge {
         final String mimeType;
         final long size;
         final long expiresAt;
+        volatile String phoneSource = "";
+        volatile String phoneFileName = "";
+        volatile String phoneMimeType = "";
+        volatile long phoneSize = -1L;
 
         LocalVideoShare(String token, String source, String fileName, String mimeType, long size, long expiresAt) {
             this.token = token;
