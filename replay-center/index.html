@@ -512,18 +512,7 @@
         </section>
 
         <aside>
-          <div class="panel">
-            <div class="panel-title">
-              <div class="step-icon">PV</div>
-              <h2>影片預覽</h2>
-            </div>
-            <div class="video-frame">
-              <video id="previewVideo" class="hidden" controls playsinline></video>
-              <div class="empty-preview" id="emptyPreview">尚未選擇影片</div>
-            </div>
-          </div>
-
-          <div class="panel">
+          <div class="panel qr-panel">
             <div class="panel-title">
               <div class="step-icon">QR</div>
               <h2>一次性二維碼</h2>
@@ -539,6 +528,10 @@
               <button id="copyWatchButton" type="button" disabled>複製連結</button>
             </div>
             <div class="result-box" id="resultBox">尚未產生連結</div>
+          </div>
+          <div class="hidden" aria-hidden="true">
+            <video id="previewVideo" class="hidden" controls playsinline></video>
+            <div class="empty-preview" id="emptyPreview"></div>
           </div>
         </aside>
       </div>

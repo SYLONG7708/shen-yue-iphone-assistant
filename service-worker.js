@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v236-replay-nav-remux-fallback";
+const cacheName = "shen-yue-assistant-v237-replay-auto-qr";
 const assets = [
   "./",
   "./index.html",

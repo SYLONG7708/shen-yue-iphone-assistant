@@ -5,6 +5,7 @@
   var selectedObjectUrl = ''
   var lastWatchUrl = ''
   var preparePollTimer = 0
+  var autoUploadTimer = 0
   var preferredHost = 'https://shanghai-hiv-teens-halifax.trycloudflare.com'
 
   var defaults = {
@@ -171,6 +172,12 @@
     preparePollTimer = 0
   }
 
+  function clearAutoUpload() {
+    if (!autoUploadTimer) return
+    window.clearTimeout(autoUploadTimer)
+    autoUploadTimer = 0
+  }
+
   function hasNativeVideoBridge() {
     return Boolean(
       window.ShenYueUpdater &&
@@ -205,6 +212,10 @@
   function isTransportStreamVideo(item) {
     if (!item) return false
     return /\.(ts|mts|m2ts)$/i.test(item.name || '') || /video\/(mp2t|mpeg|mpeg2)/i.test(item.mimeType || '')
+  }
+
+  function guessNativeMimeType(fileName) {
+    return /\.(ts|mts|m2ts)$/i.test(fileName || '') ? 'video/mp2t' : 'video/mp4'
   }
 
   function showNativePreview(uri) {
@@ -299,6 +310,7 @@
 
   function selectNativeVideo(item) {
     clearPreparePoll()
+    clearAutoUpload()
     selectedFile = null
     selectedNativeVideo = item
     lastWatchUrl = ''
@@ -306,33 +318,26 @@
     el.fileInput.value = ''
     el.fileName.innerHTML = escapeHtml(item.name || 'replay-video.mp4')
     el.fileMeta.innerHTML = formatBytes(item.size || 0) + ' / ' + (item.mimeType || 'video') + ' / ' + (item.source || 'USB 影片')
-    el.uploadButton.disabled = false
+    el.uploadButton.disabled = true
     el.shareButton.disabled = true
-    el.resultBox.innerHTML = '已選擇車機影片，等待上傳。'
+    el.resultBox.innerHTML = '已選擇車機影片，正在上傳並產生 QR。'
     resetQr()
 
     if (selectedObjectUrl) URL.revokeObjectURL(selectedObjectUrl)
     selectedObjectUrl = ''
-    if (item.uri) {
-      if (isTransportStreamVideo(item) && canPrepareNativeVideo()) {
-        hideNativePreview()
-        el.uploadButton.disabled = true
-        setProgress(2, true)
-        setStatus('busy', '正在準備 TS 影片為 MP4，完成後可預覽並產生 QR。')
-        if (canPrepareNativeVideoAsync()) {
-          window.setTimeout(function () {
-            startPreparingSelectedNativeVideo(item)
-          }, 60)
-        } else {
-          window.setTimeout(function () {
-            prepareSelectedNativeVideo(item)
-          }, 60)
-        }
-        return
-      }
-      showNativePreview(item.uri)
-    }
-    setStatus('ready', '已選擇車機影片：' + escapeHtml(item.name || 'replay-video.mp4'))
+    hideNativePreview()
+    selectedNativeVideo.uploadUri = item.uri || ''
+    selectedNativeVideo.uploadName = item.name || 'replay-video.mp4'
+    selectedNativeVideo.uploadMimeType = item.mimeType || guessNativeMimeType(item.name)
+    selectedNativeVideo.uploadSize = item.size || 0
+    selectedNativeVideo.uploadOriginal = true
+    setProgress(4, true)
+    setStatus('busy', '已選擇車機影片，正在直接上傳並產生 QR。')
+    autoUploadTimer = window.setTimeout(function () {
+      autoUploadTimer = 0
+      if (!selectedNativeVideo || selectedNativeVideo.uri !== item.uri) return
+      uploadAndCreateShare()
+    }, 120)
   }
 
   function startPreparingSelectedNativeVideo(item) {
@@ -446,6 +451,7 @@
   function handleFile(file) {
     if (!file) return
     clearPreparePoll()
+    clearAutoUpload()
     if (file.type && file.type.indexOf('video/') !== 0 && !/\.(mp4|m4v|mov|mkv|webm|ts|mts|m2ts)$/i.test(file.name)) {
       setStatus('error', '請選擇影片檔。')
       return
@@ -457,9 +463,9 @@
     setProgress(0)
     el.fileName.innerHTML = escapeHtml(file.name)
     el.fileMeta.innerHTML = formatBytes(file.size) + ' / ' + (file.type || 'video')
-    el.uploadButton.disabled = false
+    el.uploadButton.disabled = true
     el.shareButton.disabled = true
-    el.resultBox.innerHTML = '已選擇影片，等待上傳。'
+    el.resultBox.innerHTML = '已選擇影片，正在上傳並產生 QR。'
     resetQr()
 
     if (selectedObjectUrl) URL.revokeObjectURL(selectedObjectUrl)
@@ -467,11 +473,18 @@
     el.previewVideo.src = selectedObjectUrl
     el.previewVideo.className = ''
     el.emptyPreview.className = 'hidden'
-    setStatus('ready', '影片已加入待上傳清單：' + escapeHtml(file.name))
+    setProgress(4, true)
+    setStatus('busy', '影片已加入清單，正在上傳並產生 QR。')
+    autoUploadTimer = window.setTimeout(function () {
+      autoUploadTimer = 0
+      if (selectedFile !== file) return
+      uploadAndCreateShare()
+    }, 120)
   }
 
   function resetFile() {
     clearPreparePoll()
+    clearAutoUpload()
     selectedFile = null
     selectedNativeVideo = null
     lastWatchUrl = ''
@@ -533,7 +546,7 @@
     saveSettings()
     el.uploadButton.disabled = true
     el.shareButton.disabled = true
-    setProgress(0)
+    setProgress(6, true)
     setStatus('busy', '正在上傳影片，請保持網路連線。')
 
     if (selectedNativeVideo) {
@@ -560,8 +573,14 @@
       createOneTimeLink(publicUrl, uploadResult, function (shareError, shareResult) {
         el.uploadButton.disabled = false
         if (shareError) {
-          setStatus('error', '一次性 QR 建立失敗：' + escapeHtml(shareError.message || shareError))
-          el.resultBox.innerHTML = '影片已上傳：<br>' + escapeHtml(publicUrl)
+          showShare(
+            {
+              watchUrl: publicUrl,
+              mode: 'direct-fallback',
+              errorMessage: shareError.message || shareError,
+            },
+            publicUrl
+          )
           return
         }
 
@@ -614,8 +633,14 @@
       createOneTimeLink(publicUrl, uploadResult, function (shareError, shareResult) {
         el.uploadButton.disabled = false
         if (shareError) {
-          setStatus('error', '一次性 QR 建立失敗：' + escapeHtml(shareError.message || shareError))
-          el.resultBox.innerHTML = '影片已上傳：<br>' + escapeHtml(publicUrl)
+          showShare(
+            {
+              watchUrl: publicUrl,
+              mode: 'direct-fallback',
+              errorMessage: shareError.message || shareError,
+            },
+            publicUrl
+          )
           return
         }
 
@@ -677,6 +702,9 @@
   function showShare(shareResult, publicUrl) {
     var watchUrl = shareResult.watchUrl || shareResult.url || publicUrl
     lastWatchUrl = watchUrl
+    var isDirectFallback = shareResult.mode === 'direct-fallback'
+    var qrTitle = isDirectFallback ? '掃碼開啟影片連結' : '掃碼觀看影片'
+    var qrNote = isDirectFallback ? '一次性 API 暫時失敗，已先顯示影片直連 QR。' : '手機掃描後可觀看並下載。'
 
     var qrDataUrl = shareResult.qrDataUrl || ''
     if (!qrDataUrl) {
@@ -686,7 +714,11 @@
     el.qrWrap.innerHTML =
       '<img src="' +
       escapeAttr(qrDataUrl) +
-      '" alt="一次性 QR Code"><strong>掃碼觀看影片</strong><p class="muted">手機掃描後可觀看並下載。</p>'
+      '" alt="一次性 QR Code"><strong>' +
+      escapeHtml(qrTitle) +
+      '</strong><p class="muted">' +
+      escapeHtml(qrNote) +
+      '</p>'
     el.openWatchButton.href = watchUrl
     el.openWatchButton.className = 'link-button'
     el.copyWatchButton.disabled = false
@@ -696,6 +728,10 @@
       escapeHtml(watchUrl) +
       '</strong><br><br>影片網址：<br>' +
       escapeHtml(publicUrl)
+    if (isDirectFallback) {
+      setStatus('ready', '影片已上傳；一次性 QR API 暫時失敗，已先產生影片直連 QR。')
+      return
+    }
     setStatus('ready', '完整流程完成：影片已上傳，並已產生一次性 QR。')
   }
 
