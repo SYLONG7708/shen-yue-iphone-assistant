@@ -163,7 +163,8 @@
           <div class="meta-row"><span>下載來源</span><strong class="value" id="sourceText">-</strong></div>
         </div>
         <div class="actions">
-          <a id="download" class="primary" href="#" target="_blank" rel="noopener" download>下載 MP4</a>
+          <a id="download" class="primary" href="#" rel="noopener" download>下載 MP4</a>
+          <a id="localFallback" class="hidden" href="#" rel="noopener">本機下載頁</a>
           <a id="openDirect" class="hidden" href="#" target="_blank" rel="noopener">原始影片</a>
           <button type="button" id="externalPlayer" class="hidden">外部播放器</button>
           <button type="button" id="share">分享通訊APP</button>
@@ -219,6 +220,7 @@
       let currentName = "replay-video.mp4";
       let currentMime = "";
       let currentExtension = "";
+      let currentFallback = "";
       let loadToken = 0;
       let diagnosticsTimer = 0;
 
@@ -296,6 +298,7 @@
 
       const player = document.getElementById("player");
       const download = document.getElementById("download");
+      const localFallback = document.getElementById("localFallback");
       const openDirect = document.getElementById("openDirect");
       const externalPlayer = document.getElementById("externalPlayer");
       const share = document.getElementById("share");
@@ -331,6 +334,7 @@
       function setControlsVisible(visible) {
         player.classList.add("hidden");
         download.classList.toggle("hidden", !visible);
+        localFallback.classList.add("hidden");
         openDirect.classList.add("hidden");
         externalPlayer.classList.add("hidden");
         share.classList.toggle("hidden", !visible);
@@ -462,6 +466,8 @@
         const size = firstValue("s", "size");
         const rawMime = firstValue("m", "mime", "type");
         const rawExt = firstValue("ext", "format");
+        const fallback = firstValue("fallback", "localWatch", "localWatchUrl");
+        const source = firstValue("source");
         const extension = extensionFrom(rawExt || name || video);
         const mime = mimeFrom(extension, rawMime);
         const allowDownload = (firstValue("download") || "1") !== "0";
@@ -470,11 +476,12 @@
         currentName = name;
         currentMime = mime;
         currentExtension = extension;
+        currentFallback = isHttpVideoUrl(fallback) ? fallback : "";
         fileName.textContent = name;
         uidText.textContent = uid;
         sizeText.textContent = formatBytes(size);
         formatText.textContent = `${FORMAT_LABELS[extension] || extension.toUpperCase() || "未知"} / ${mime}`;
-        sourceText.textContent = video || "-";
+        sourceText.textContent = source === "local-fast" ? "車機本機下載" : (video || "-");
         subtitle.textContent = "手機下載與分享頁";
         hideNotice();
         diagnostics.classList.add("hidden");
@@ -490,6 +497,8 @@
         download.classList.toggle("hidden", !allowDownload);
         download.href = video;
         download.download = name || "replay-video.mp4";
+        localFallback.classList.toggle("hidden", !currentFallback);
+        if (currentFallback) localFallback.href = currentFallback;
         openDirect.href = video;
         setState("已準備下載或分享");
       }
@@ -504,9 +513,21 @@
       player.addEventListener("stalled", () => showNotice("影片讀取暫停，正在等待網路或雲端回應。", "warn"));
       player.addEventListener("error", () => showPlaybackFailure(playbackErrorMessage()));
 
-      download.addEventListener("click", () => {
+      download.addEventListener("click", (event) => {
         if (!currentVideo) return;
-        showNotice("已開啟下載。若通訊軟體內建瀏覽器無法保存，請用右上角選單改用系統瀏覽器開啟。");
+        event.preventDefault();
+        setState("正在開啟下載");
+        showNotice(currentFallback
+          ? "正在開啟下載。若沒有出現保存提示，請回到本頁按「本機下載頁」。"
+          : "正在開啟下載。若通訊軟體內建瀏覽器無法保存，請用右上角選單改用系統瀏覽器開啟。");
+        window.setTimeout(() => {
+          location.href = currentVideo;
+        }, 80);
+      });
+
+      localFallback.addEventListener("click", () => {
+        if (!currentFallback) return;
+        showNotice("正在開啟車機本機下載頁；手機需與車機在同一個 Wi-Fi 或熱點網路。");
       });
 
       externalPlayer.addEventListener("click", () => {
@@ -518,34 +539,35 @@
         if (!currentVideo) return;
         const shareData = {
           title: "回放中心",
-          text: `${currentName} 觀看與下載連結`,
-          url: location.href
+          text: `${currentName} 下載連結`,
+          url: currentVideo
         };
         if (navigator.share) {
           await navigator.share(shareData);
           return;
         }
-        await copyCurrentUrl("此瀏覽器沒有分享視窗，已複製播放連結。");
+        await copyCurrentUrl("此瀏覽器沒有分享視窗，已複製下載連結。");
       });
 
       lineShare.addEventListener("click", () => {
         if (!currentVideo) return;
-        const text = encodeURIComponent(`${currentName}\n${location.href}`);
+        const text = encodeURIComponent(`${currentName}\n${currentVideo}`);
         location.href = `https://line.me/R/msg/text/?${text}`;
       });
 
       async function copyCurrentUrl(message) {
+        const value = currentVideo || location.href;
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(location.href);
-          showNotice(message || "已複製播放連結。");
+          await navigator.clipboard.writeText(value);
+          showNotice(message || "已複製下載連結。");
         } else {
-          window.prompt("請複製播放連結", location.href);
+          window.prompt("請複製下載連結", value);
         }
       }
 
       copy.addEventListener("click", async () => {
         if (!currentVideo) return;
-        await copyCurrentUrl("已複製播放連結。");
+        await copyCurrentUrl("已複製下載連結。");
       });
 
       window.addEventListener("hashchange", applyVideoFromLocation);

@@ -520,13 +520,15 @@ public class UpdateBridge {
             String originalUrl = baseUrl + "/local-video/" + token + "/" + encodedName;
             String playUrl = baseUrl + "/local-play/" + token + "/" + encodedDownloadName;
             String downloadUrl = baseUrl + "/local-download/" + token + "/" + encodedDownloadName;
-            String watchUrl = buildCloudWatchUrl(token, downloadName, "video/mp4", share.size, downloadUrl, originalUrl, localWatchUrl);
+            String cloudWatchUrl = buildCloudWatchUrl(token, downloadName, "video/mp4", share.size, downloadUrl, originalUrl, localWatchUrl);
+            String watchUrl = localWatchUrl;
             result.put("ok", true);
             result.put("mode", "local-fast");
             result.put("publicUrl", watchUrl);
             result.put("url", watchUrl);
             result.put("watchUrl", watchUrl);
             result.put("localWatchUrl", localWatchUrl);
+            result.put("cloudWatchUrl", cloudWatchUrl);
             result.put("videoUrl", playUrl);
             result.put("downloadUrl", downloadUrl);
             result.put("originalUrl", originalUrl);
@@ -1736,12 +1738,16 @@ public class UpdateBridge {
                 .append(urlEncode(saveName + "\n" + downloadUrl))
                 .append("\">LINE</a>")
                 .append("<button id=\"copy\" class=\"button\" type=\"button\">複製連結</button>")
-                .append("</div><p class=\"note\">").append(htmlEscape(conversionText))
+                .append("</div><p id=\"hint\" class=\"note\">").append(htmlEscape(conversionText))
                 .append("<br>手機需與車機在同一個 Wi-Fi 或熱點網路。</p>")
                 .append("<p class=\"note\"><a href=\"").append(htmlEscape(originalUrl)).append("\">原始檔備援連結</a></p>")
                 .append("<script>")
-                .append("const u='").append(jsStringEscape(downloadUrl)).append("';")
+                .append("const p='").append(jsStringEscape(downloadUrl)).append("';")
+                .append("const u=new URL(p,location.href).href;")
                 .append("const n='").append(jsStringEscape(saveName)).append("';")
+                .append("const d=document.getElementById('download');")
+                .append("d.href=u;d.onclick=()=>setTimeout(()=>{document.getElementById('hint').textContent='如果沒有出現保存提示，請用系統瀏覽器開啟本頁後再按下載 MP4。';},700);")
+                .append("document.querySelector('a[href^=\"https://line.me/\"]').href='https://line.me/R/msg/text/?'+encodeURIComponent(n+'\\n'+u);")
                 .append("document.getElementById('share').onclick=async()=>{")
                 .append("if(navigator.share){await navigator.share({title:n,text:n,url:u});return;}")
                 .append("prompt('請複製下載連結',u);};")

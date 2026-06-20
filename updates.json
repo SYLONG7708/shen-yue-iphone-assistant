@@ -1,19 +1,19 @@
-﻿{
+{
     "schema":  1,
     "channel":  "stable",
-    "updatedAt":  "2026-06-19T19:26:47+08:00",
+    "updatedAt":  "2026-06-20T17:07:26+08:00",
     "apps":  [
                  {
-                     "id":  "tw.com.shenyue.assistant-131",
+                     "id":  "tw.com.shenyue.assistant-132",
                      "name":  "申悅車機助手",
                      "packageName":  "tw.com.shenyue.assistant",
-                     "versionCode":  131,
-                     "versionName":  "1.0.31-car-legacy-cloud",
+                     "versionCode":  132,
+                     "versionName":  "1.0.32-car-legacy-cloud",
                      "minAndroid":  "依 APK 設定",
                      "targetSdk":  "28",
-                     "sizeLabel":  "2.2 MB",
-                     "apkUrl":  "https://sylong7708.github.io/shen-yue-iphone-assistant/releases/1.0.31-replay-download-share-cloud/ShenYueAssistant-1.0.31-replay-download-share-cloud-car-legacy-cloud-release-debug-signed.apk",
-                     "sha256":  "77ab13db8261d1fb1c34e7e1fa522ef3a6faceb1b0e8dec00b3540e53e3a93af",
+                     "sizeLabel":  "2.3 MB",
+                     "apkUrl":  "https://sylong7708.github.io/shen-yue-iphone-assistant/releases/1.0.32-replay-direct-download/ShenYueAssistant-1.0.32-replay-direct-download-car-legacy-cloud-release-debug-signed.apk",
+                     "sha256":  "9996b08d264d446d3a075e99c41d6a77a79d9c2faf9f484880a75c644e0f7041",
                      "imageUrl":  "https://sylong7708.github.io/shen-yue-iphone-assistant/assets/update-gallery/tw.com.shenyue.assistant-110-photo-1.png",
                      "iconUrl":  "https://sylong7708.github.io/shen-yue-iphone-assistant/assets/update-icons/tw.com.shenyue.assistant-110-icon.png",
                      "galleryImages":  [
@@ -21,11 +21,11 @@
                                            "https://sylong7708.github.io/shen-yue-iphone-assistant/assets/update-gallery/tw.com.shenyue.assistant-110-photo-2.png"
                                        ],
                      "category":  "申悅助手",
-                     "description":  "申悅車機助手雲端更新版，首頁讀取 GitHub Pages；回放中心 QR 手機頁取消影片播放，改為下載 MP4、LINE 與系統分享。",
+                     "description":  "申悅車機助手雲端更新版，首頁讀取 GitHub Pages；回放中心 QR 改回直接開車機本機下載頁，並補強雲端頁下載與本機頁備援。",
                      "changelog":  [
-                                       "回放中心 QR 手機頁取消影片播放",
-                                       "改為單獨顯示下載 MP4、LINE、分享通訊APP、複製連結",
-                                       "APK 首頁改讀雲端 GitHub Pages，之後前端可雲端更新"
+                                       "新 QR 優先開啟車機本機下載頁，降低手機只分享網址的情況",
+                                       "雲端 watch 頁改為直接導向下載網址，並顯示本機下載頁備援",
+                                       "下載、LINE、分享與複製動作改用實際影片下載連結"
                                    ]
                  },
                  {

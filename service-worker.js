@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v242-replay-download-share-cloud";
+const cacheName = "shen-yue-assistant-v243-replay-direct-download";
 const assets = [
   "./",
   "./index.html",
