@@ -21,6 +21,10 @@ html {
   scroll-behavior: smooth;
 }
 
+html.android-apk {
+  scroll-behavior: auto;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -424,6 +428,38 @@ h3 {
   min-height: 720px;
   background: #090b0c;
   border: 0;
+}
+
+html.android-apk .app-header,
+html.android-apk .tab-bar {
+  background: rgba(5, 10, 16, 0.96);
+  backdrop-filter: none;
+}
+
+html.android-apk .hero-glow {
+  display: none;
+}
+
+html.android-apk .dashboard-grid a,
+html.android-apk .service-grid article,
+html.android-apk .video-card,
+html.android-apk .record-card,
+html.android-apk .update-toolbar,
+html.android-apk .update-upload-card,
+html.android-apk .update-status,
+html.android-apk .update-device,
+html.android-apk .update-icon-card,
+html.android-apk .update-card,
+html.android-apk .cloud-actions,
+html.android-apk .admin-lock,
+html.android-apk .admin-panel,
+html.android-apk .contact-grid,
+html.android-apk .replay-frame-wrap {
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+html.android-apk .tab-bar button.active {
+  box-shadow: none;
 }
 
 .icon-1 { background-position: 0% 0%; }

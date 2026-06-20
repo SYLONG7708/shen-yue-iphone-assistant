@@ -81,6 +81,7 @@ public class UpdateBridge {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ExecutorService localVideoExecutor = Executors.newCachedThreadPool();
     private final ConcurrentHashMap<String, UpdateTask> tasks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, LocalVideoScanTask> videoScanTasks = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, VideoPrepareTask> videoPrepareTasks = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, VideoUploadTask> videoUploadTasks = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, LocalVideoShare> localVideoShares = new ConcurrentHashMap<>();
@@ -317,7 +318,9 @@ public class UpdateBridge {
                 return;
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                    && !Environment.isExternalStorageManager()
+                    && !canScanRawExternalFiles()) {
                 Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
                 intent.setData(Uri.parse("package:" + activity.getPackageName()));
                 try {
@@ -334,6 +337,39 @@ public class UpdateBridge {
 
     @JavascriptInterface
     public String listLocalVideos() {
+        return buildLocalVideosResult().toString();
+    }
+
+    @JavascriptInterface
+    public String listLocalVideosAsync() {
+        LocalVideoScanTask task = new LocalVideoScanTask("scan-" + System.currentTimeMillis());
+        videoScanTasks.put(task.id, task);
+        localVideoExecutor.execute(() -> runLocalVideoScan(task));
+        return task.toJson().toString();
+    }
+
+    @JavascriptInterface
+    public String getLocalVideoScanStatus(String taskId) {
+        LocalVideoScanTask task = videoScanTasks.get(taskId == null ? "" : taskId);
+        if (task == null) {
+            return "{\"ok\":false,\"message\":\"找不到影片掃描任務。\"}";
+        }
+        return task.toJson().toString();
+    }
+
+    private void runLocalVideoScan(LocalVideoScanTask task) {
+        task.status = "running";
+        task.progress = 12;
+        task.message = "正在掃描 USB/DCIM/CAMERA...";
+        try {
+            JSONObject result = buildLocalVideosResult();
+            task.complete(result);
+        } catch (Exception error) {
+            task.fail(error.getMessage() == null ? error.toString() : error.getMessage());
+        }
+    }
+
+    private JSONObject buildLocalVideosResult() {
         JSONObject result = new JSONObject();
         JSONArray items = new JSONArray();
         JSONArray scanRoots = new JSONArray();
@@ -346,7 +382,7 @@ public class UpdateBridge {
                 result.put("message", "請先允許讀取影片；固定讀取 USB 的 DCIM/CAMERA 可能需要所有檔案存取。");
                 result.put("items", items);
                 result.put("scanRoots", scanRoots);
-                return result.toString();
+                return result;
             }
 
             if (canScanRawExternalFiles()) {
@@ -370,7 +406,7 @@ public class UpdateBridge {
                 // JSON error while reporting another error.
             }
         }
-        return result.toString();
+        return result;
     }
 
     @JavascriptInterface
@@ -2292,6 +2328,60 @@ public class UpdateBridge {
             this.mimeType = mimeType;
             this.size = size;
             this.converted = converted;
+        }
+    }
+
+    private static class LocalVideoScanTask {
+        final String id;
+        volatile String status = "queued";
+        volatile int progress = 0;
+        volatile String message = "等待掃描";
+        volatile JSONArray items = new JSONArray();
+        volatile JSONArray scanRoots = new JSONArray();
+        volatile int count = 0;
+        volatile String scanPaths = "";
+
+        LocalVideoScanTask(String id) {
+            this.id = id;
+        }
+
+        void complete(JSONObject result) {
+            boolean ok = result.optBoolean("ok", false);
+            status = ok ? "done" : "failed";
+            progress = ok ? 100 : 0;
+            message = ok
+                    ? "掃描完成，找到 " + result.optInt("count", 0) + " 個影片。"
+                    : result.optString("message", "掃描失敗");
+            items = result.optJSONArray("items");
+            if (items == null) items = new JSONArray();
+            scanRoots = result.optJSONArray("scanRoots");
+            if (scanRoots == null) scanRoots = new JSONArray();
+            count = result.optInt("count", items.length());
+            scanPaths = result.optString("scanPaths", "");
+        }
+
+        void fail(String errorMessage) {
+            status = "failed";
+            progress = 0;
+            message = errorMessage == null || errorMessage.length() == 0 ? "掃描失敗" : errorMessage;
+        }
+
+        JSONObject toJson() {
+            JSONObject object = new JSONObject();
+            try {
+                object.put("ok", true);
+                object.put("taskId", id);
+                object.put("status", status);
+                object.put("progress", progress);
+                object.put("message", message);
+                object.put("items", items);
+                object.put("count", count);
+                object.put("scanRoots", scanRoots);
+                if (scanPaths.length() > 0) object.put("scanPaths", scanPaths);
+            } catch (JSONException ignored) {
+                // In-memory values are simple JSON-compatible values.
+            }
+            return object;
         }
     }
 

@@ -38,6 +38,8 @@ const defaultApkReleaseTagUrl = "https://github.com/SYLONG7708/update/releases/t
 const defaultApkReleaseDownloadBase = "https://github.com/SYLONG7708/update/releases/download/apk-cloud/";
 const maxInlineImageUploadBytes = 8 * 1024 * 1024;
 const maxInlineApkUploadBytes = 24 * 1024 * 1024;
+const isAndroidApk = /\bShenYueAndroidApk\//i.test(navigator.userAgent || "");
+const tabScrollBehavior = isAndroidApk ? "auto" : "smooth";
 const updateUploadFileTargets = {
   iconFile: { fieldName: "iconUrl", kind: "image", label: "應用圖標" },
   firstImageFile: { fieldName: "firstImageUrl", kind: "image", label: "第一張圖片" },
@@ -51,6 +53,10 @@ const legacyCloudDeploymentIds = new Set([
   "AKfycbxxtXq2JnoqYHU7rHDo4Ddfe_ZfPzwDolglZsbBmY2j1YUkV1fbqcFv8KhNh-stPL8",
   "AKfycbzV2bw_y88ix-g5k_X1afwRNi-8MvYVAnUDezevLe4oQvKrdnjnFp8iqeDFu5Fcqh7t6A"
 ]);
+
+if (isAndroidApk) {
+  document.documentElement.classList.add("android-apk");
+}
 const legacyCloudEndpoints = new Set([
   "https://script.google.com/macros/s/AKfycbxcIrA3syOcg6qCriinVl5KoUt20EnkOIdrW6kXM1OSM5dFZq1qUISkU8Ke8NJQPWuz/exec",
   "https://script.google.com/macros/s/AKfycbxxtXq2JnoqYHU7rHDo4Ddfe_ZfPzwDolglZsbBmY2j1YUkV1fbqcFv8KhNh-stPL8/exec"
@@ -491,9 +497,10 @@ async function loadRemoteContent(showMessage = false) {
   }
 }
 
-function checkRemoteContentNow() {
+function checkRemoteContentNow(options = {}) {
   const now = Date.now();
-  if (now - lastRemoteContentCheck < 3000) return;
+  const interval = isAndroidApk ? 120000 : 3000;
+  if (!options.force && now - lastRemoteContentCheck < interval) return;
   lastRemoteContentCheck = now;
   loadRemoteContent();
 }
@@ -2710,7 +2717,11 @@ function switchTab(tabId) {
   if (tabId === "updates") {
     initUpdateCenter();
   }
-  document.getElementById(tabId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const panel = document.getElementById(tabId);
+  if (panel) {
+    if (location.hash !== `#${tabId}`) history.replaceState(null, "", `#${tabId}`);
+    panel.scrollIntoView({ behavior: tabScrollBehavior, block: "start" });
+  }
 }
 
 function restoreChecklist() {
@@ -3015,11 +3026,13 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-window.addEventListener("pageshow", checkRemoteContentNow);
-window.addEventListener("focus", checkRemoteContentNow);
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) checkRemoteContentNow();
-});
+window.addEventListener("pageshow", () => checkRemoteContentNow());
+if (!isAndroidApk) {
+  window.addEventListener("focus", () => checkRemoteContentNow());
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) checkRemoteContentNow();
+  });
+}
 
 migrateLegacyData();
 renderRecord();
@@ -3035,5 +3048,5 @@ if (location.hash) {
     switchTab(tabId);
   }
 }
-checkRemoteContentNow();
+checkRemoteContentNow({ force: true });
 cloudStatus.textContent = "已設定申悅雲端網址，可上傳保固資料與更新中心資料。";

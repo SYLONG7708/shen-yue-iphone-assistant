@@ -5,6 +5,7 @@
   var selectedObjectUrl = ''
   var lastWatchUrl = ''
   var preparePollTimer = 0
+  var scanPollTimer = 0
   var uploadPollTimer = 0
   var autoUploadTimer = 0
   var preferredHost = 'https://shanghai-hiv-teens-halifax.trycloudflare.com'
@@ -105,6 +106,14 @@
     el.copyWatchButton.addEventListener('click', function () {
       copyText(lastWatchUrl)
     })
+    window.addEventListener('focus', refreshNativeAccessState)
+    window.addEventListener('pageshow', refreshNativeAccessState)
+    window.addEventListener('message', function (event) {
+      if (event && event.data && event.data.type === 'shenYueApkResume') refreshNativeAccessState()
+    })
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) refreshNativeAccessState()
+    })
   }
 
   function readSettings() {
@@ -175,6 +184,12 @@
     preparePollTimer = 0
   }
 
+  function clearScanPoll() {
+    if (!scanPollTimer) return
+    window.clearTimeout(scanPollTimer)
+    scanPollTimer = 0
+  }
+
   function clearUploadPoll() {
     if (!uploadPollTimer) return
     window.clearTimeout(uploadPollTimer)
@@ -215,6 +230,14 @@
       window.ShenYueUpdater &&
         typeof window.ShenYueUpdater.prepareLocalVideoAsync === 'function' &&
         typeof window.ShenYueUpdater.getLocalVideoPrepareStatus === 'function'
+    )
+  }
+
+  function canScanNativeVideosAsync() {
+    return Boolean(
+      window.ShenYueUpdater &&
+        typeof window.ShenYueUpdater.listLocalVideosAsync === 'function' &&
+        typeof window.ShenYueUpdater.getLocalVideoScanStatus === 'function'
     )
   }
 
@@ -276,7 +299,7 @@
   function requestNativeVideoAccess() {
     if (!hasNativeVideoBridge() || typeof window.ShenYueUpdater.requestVideoAccess !== 'function') return
     window.ShenYueUpdater.requestVideoAccess()
-    setStatus('ready', '已開啟 Android 權限畫面；授權後回到本頁再按「掃描 USB/DCIM」。')
+    setStatus('ready', '已開啟 Android 權限畫面；授權後回到本頁會自動刷新狀態。')
     window.setTimeout(refreshNativeAccessState, 800)
   }
 
@@ -287,6 +310,15 @@
     }
     setStatus('busy', '正在掃描 USB1/USB2 與車機實際 USB 掛載點的 DCIM/CAMERA 影片。')
     el.nativeVideoList.innerHTML = '<div class="result-box">掃描中...</div>'
+    clearScanPoll()
+    if (canScanNativeVideosAsync()) {
+      var started = parseNativeResult(window.ShenYueUpdater.listLocalVideosAsync())
+      if (started.ok && started.taskId) {
+        setProgress(Math.max(8, started.progress || 8), true)
+        pollNativeVideoScan(started.taskId)
+        return
+      }
+    }
     window.setTimeout(function () {
       var result = parseNativeResult(window.ShenYueUpdater.listLocalVideos())
       if (!result.ok) {
@@ -296,6 +328,35 @@
       }
       renderNativeVideos(result.items || [], result.scanRoots || [])
     }, 60)
+  }
+
+  function pollNativeVideoScan(taskId) {
+    var state = parseNativeResult(window.ShenYueUpdater.getLocalVideoScanStatus(taskId))
+    if (!state.ok) {
+      clearScanPoll()
+      setProgress(0, false)
+      el.nativeVideoList.innerHTML = '<div class="result-box">' + escapeHtml(state.message || '掃描失敗') + '</div>'
+      setStatus('error', escapeHtml(state.message || '掃描失敗'))
+      return
+    }
+
+    setProgress(Math.max(8, state.progress || 8), state.status !== 'done' && state.status !== 'failed')
+    setStatus(state.status === 'failed' ? 'error' : 'busy', escapeHtml(state.message || '正在掃描 USB/DCIM/CAMERA...'))
+    if (state.status === 'done') {
+      clearScanPoll()
+      renderNativeVideos(state.items || [], state.scanRoots || [])
+      return
+    }
+    if (state.status === 'failed') {
+      clearScanPoll()
+      el.nativeVideoList.innerHTML = '<div class="result-box">' + escapeHtml(state.message || '掃描失敗') + '</div>'
+      setProgress(0, false)
+      return
+    }
+
+    scanPollTimer = window.setTimeout(function () {
+      pollNativeVideoScan(taskId)
+    }, 350)
   }
 
   function renderNativeVideos(items, scanRoots) {
@@ -308,13 +369,15 @@
       return
     }
     el.nativeVideoList.innerHTML = ''
+    var fragment = document.createDocumentFragment()
     for (var i = 0; i < items.length; i += 1) {
-      appendNativeVideoItem(items[i])
+      fragment.appendChild(createNativeVideoItem(items[i]))
     }
+    el.nativeVideoList.appendChild(fragment)
     setStatus('ready', '掃描完成，從 USB DCIM/CAMERA 找到 ' + items.length + ' 個影片。')
   }
 
-  function appendNativeVideoItem(item) {
+  function createNativeVideoItem(item) {
     var button = document.createElement('button')
     button.type = 'button'
     button.className = 'native-video-item'
@@ -332,11 +395,12 @@
     button.addEventListener('click', function () {
       selectNativeVideo(item)
     })
-    el.nativeVideoList.appendChild(button)
+    return button
   }
 
   function selectNativeVideo(item) {
     clearPreparePoll()
+    clearScanPoll()
     clearUploadPoll()
     clearAutoUpload()
     selectedFile = null
@@ -479,6 +543,7 @@
   function handleFile(file) {
     if (!file) return
     clearPreparePoll()
+    clearScanPoll()
     clearUploadPoll()
     clearAutoUpload()
     if (file.type && file.type.indexOf('video/') !== 0 && !/\.(mp4|m4v|mov|mkv|webm|ts|mts|m2ts)$/i.test(file.name)) {

@@ -27,7 +27,6 @@ public class MainActivity extends Activity {
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
     private ValueCallback<Uri[]> filePathCallback;
-    private long lastCloudRefresh = 0;
     private UpdateBridge updateBridge;
 
     @Override
@@ -39,6 +38,7 @@ public class MainActivity extends Activity {
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(7, 16, 24));
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         setContentView(webView);
 
         WebSettings settings = webView.getSettings();
@@ -50,6 +50,10 @@ public class MainActivity extends Activity {
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            settings.setOffscreenPreRaster(true);
+        }
         settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/" + BuildConfig.VERSION_NAME);
 
         if (BuildConfig.HOME_URL.startsWith("https://")) {
@@ -120,11 +124,13 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                clearWebPageCaches(view);
             }
         });
 
-        loadHomePage();
+        boolean restored = savedInstanceState != null && webView.restoreState(savedInstanceState) != null;
+        if (!restored) {
+            loadHomePage();
+        }
     }
 
     private Intent buildCompatibleFileChooser(WebChromeClient.FileChooserParams fileChooserParams) {
@@ -216,8 +222,7 @@ public class MainActivity extends Activity {
 
         if ("file".equals(scheme)) return false;
         if ("https".equals(scheme) && "sylong7708.github.io".equals(host)) {
-            view.loadUrl(withCacheBuster(url));
-            return true;
+            return false;
         }
         if ("https".equals(scheme) && isInlineVideoHost(host)) return false;
 
@@ -230,19 +235,16 @@ public class MainActivity extends Activity {
     }
 
     private void configureLiveCloudLoading(WebSettings settings) {
-        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-        webView.clearCache(true);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             ServiceWorkerController.getInstance()
                     .getServiceWorkerWebSettings()
-                    .setCacheMode(WebSettings.LOAD_NO_CACHE);
+                    .setCacheMode(WebSettings.LOAD_DEFAULT);
         }
     }
 
     private void loadHomePage() {
         if (BuildConfig.HOME_URL.startsWith("https://")) {
-            lastCloudRefresh = System.currentTimeMillis();
-            webView.clearCache(true);
             webView.loadUrl(withCacheBuster(BuildConfig.HOME_URL));
             return;
         }
@@ -256,26 +258,6 @@ public class MainActivity extends Activity {
                 .appendQueryParameter("_apk_live", String.valueOf(System.currentTimeMillis()))
                 .build()
                 .toString();
-    }
-
-    private void clearWebPageCaches(WebView view) {
-        if (!BuildConfig.HOME_URL.startsWith("https://") || Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
-            return;
-        }
-
-        view.evaluateJavascript(
-                "(async()=>{try{"
-                        + "if('serviceWorker' in navigator){"
-                        + "const regs=await navigator.serviceWorker.getRegistrations();"
-                        + "for(const reg of regs){await reg.unregister();}"
-                        + "}"
-                        + "if(window.caches){"
-                        + "const keys=await caches.keys();"
-                        + "for(const key of keys){await caches.delete(key);}"
-                        + "}"
-                        + "}catch(e){}})();",
-                null
-        );
     }
 
     private boolean isInlineVideoHost(String host) {
@@ -346,14 +328,26 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (webView != null) {
+            webView.saveState(outState);
+        }
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
-        if (
-                webView != null
-                        && BuildConfig.HOME_URL.startsWith("https://")
-                        && System.currentTimeMillis() - lastCloudRefresh > 1200
-        ) {
-            loadHomePage();
+        if (webView != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            webView.evaluateJavascript(
+                    "(()=>{"
+                            + "window.dispatchEvent(new Event('shenYueApkResume'));"
+                            + "document.querySelectorAll('iframe').forEach((frame)=>{"
+                            + "try{frame.contentWindow.postMessage({type:'shenYueApkResume'},'*');}catch(e){}"
+                            + "});"
+                            + "})();",
+                    null
+            );
         }
     }
 }
