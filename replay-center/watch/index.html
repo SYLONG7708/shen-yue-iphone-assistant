@@ -221,6 +221,7 @@
       let currentMime = "";
       let currentExtension = "";
       let currentFallback = "";
+      let currentOriginal = "";
       let loadToken = 0;
       let diagnosticsTimer = 0;
 
@@ -467,6 +468,7 @@
         const rawMime = firstValue("m", "mime", "type");
         const rawExt = firstValue("ext", "format");
         const fallback = firstValue("fallback", "localWatch", "localWatchUrl");
+        const original = firstValue("original", "originalUrl");
         const source = firstValue("source");
         const extension = extensionFrom(rawExt || name || video);
         const mime = mimeFrom(extension, rawMime);
@@ -477,6 +479,7 @@
         currentMime = mime;
         currentExtension = extension;
         currentFallback = isHttpVideoUrl(fallback) ? fallback : "";
+        currentOriginal = isHttpVideoUrl(original) ? original : "";
         fileName.textContent = name;
         uidText.textContent = uid;
         sizeText.textContent = formatBytes(size);
@@ -499,7 +502,8 @@
         download.download = name || "replay-video.mp4";
         localFallback.classList.toggle("hidden", !currentFallback);
         if (currentFallback) localFallback.href = currentFallback;
-        openDirect.href = video;
+        openDirect.classList.toggle("hidden", !currentOriginal);
+        openDirect.href = currentOriginal || video;
         setState("已準備下載或分享");
       }
 
@@ -515,14 +519,10 @@
 
       download.addEventListener("click", (event) => {
         if (!currentVideo) return;
-        event.preventDefault();
         setState("正在開啟下載");
         showNotice(currentFallback
-          ? "正在開啟下載。若沒有出現保存提示，請回到本頁按「本機下載頁」。"
-          : "正在開啟下載。若通訊軟體內建瀏覽器無法保存，請用右上角選單改用系統瀏覽器開啟。");
-        window.setTimeout(() => {
-          location.href = currentVideo;
-        }, 80);
+          ? "正在交給瀏覽器下載。若下載完成後檔案很小或沒有保存提示，請回到本頁改按「本機下載頁」或「原始影片」。"
+          : "正在交給瀏覽器下載。若通訊軟體內建瀏覽器無法保存，請用右上角選單改用系統瀏覽器開啟。");
       });
 
       localFallback.addEventListener("click", () => {

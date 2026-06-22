@@ -702,12 +702,14 @@
 
     setProgress(100)
     el.uploadButton.disabled = false
-    var watchUrl = result.watchUrl || result.publicUrl || result.url
+    var localWatchUrl = result.localWatchUrl || result.watchUrl || result.publicUrl || result.url
+    var watchUrl = result.cloudWatchUrl || localWatchUrl
     var downloadUrl = result.downloadUrl || ''
     var originalUrl = result.originalUrl || ''
     showShare(
       {
         watchUrl: watchUrl,
+        localWatchUrl: localWatchUrl,
         downloadUrl: downloadUrl,
         originalUrl: originalUrl,
         mode: 'local-fast',
@@ -719,6 +721,7 @@
       escapeHtml(watchUrl) +
       '</strong><br><br>' +
       (downloadUrl ? '下載 MP4：<br>' + escapeHtml(downloadUrl) + '<br><br>' : '') +
+      (localWatchUrl && localWatchUrl !== watchUrl ? '本機下載頁：<br>' + escapeHtml(localWatchUrl) + '<br><br>' : '') +
       '手機需與車機在同一個 Wi-Fi / 熱點網路。'
     return true
   }
