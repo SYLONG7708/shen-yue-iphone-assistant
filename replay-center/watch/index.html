@@ -229,7 +229,6 @@
       let warmupReady = false;
       let warmupInFlight = false;
       let warmupRequestedDownload = false;
-      let warmupRequestedAction = "";
       let warmupAttempts = 0;
       let warmupVideo = null;
       let loadToken = 0;
@@ -358,6 +357,9 @@
         player.classList.add("hidden");
         download.classList.toggle("hidden", !visible);
         localFallback.classList.add("hidden");
+        localFallback.href = "#";
+        localFallback.removeAttribute("download");
+        localFallback.textContent = "本機下載頁";
         openDirect.classList.add("hidden");
         externalPlayer.classList.add("hidden");
         share.classList.toggle("hidden", !visible);
@@ -376,13 +378,7 @@
         setState("下載已預備完成");
         if (message) showNotice(message);
         if (warmupRequestedDownload) {
-          const action = warmupRequestedAction;
           warmupRequestedDownload = false;
-          warmupRequestedAction = "";
-          if (action === "fallback" && currentFallback) {
-            location.href = currentFallback;
-            return;
-          }
           startFinalDownload();
         }
       }
@@ -463,21 +459,16 @@
         warmupVideo.load();
       }
 
-      function startDownloadWarmup(userRequested = false, action = "download") {
+      function startDownloadWarmup(userRequested = false) {
         if (!currentVideo) return;
         if (warmupReady) {
           if (userRequested) {
-            if (action === "fallback" && currentFallback) {
-              location.href = currentFallback;
-              return;
-            }
             startFinalDownload();
           }
           return;
         }
         if (userRequested) {
           warmupRequestedDownload = true;
-          warmupRequestedAction = action;
         }
         if (warmupInFlight) return;
         probeDownloadReady(warmupToken, userRequested);
@@ -638,7 +629,6 @@
         warmupReady = false;
         warmupInFlight = false;
         warmupRequestedDownload = false;
-        warmupRequestedAction = "";
         warmupAttempts = 0;
         fileName.textContent = name;
         uidText.textContent = uid;
@@ -660,8 +650,16 @@
         download.classList.toggle("hidden", !allowDownload);
         download.href = currentDownloadUrl;
         download.download = name || "replay-video.mp4";
-        localFallback.classList.toggle("hidden", !currentFallback);
-        if (currentFallback) localFallback.href = currentFallback;
+        if (source === "local-fast") {
+          localFallback.classList.remove("hidden");
+          localFallback.href = currentDownloadUrl;
+          localFallback.download = name || "replay-video.mp4";
+          localFallback.textContent = "備援下載 MP4";
+        } else {
+          localFallback.classList.toggle("hidden", !currentFallback);
+          if (currentFallback) localFallback.href = currentFallback;
+          localFallback.textContent = "本機下載頁";
+        }
         openDirect.classList.toggle("hidden", !currentOriginal);
         openDirect.href = currentOriginal || video;
         setState(source === "local-fast" ? "正在預備下載" : "已準備下載或分享");
@@ -692,17 +690,17 @@
         download.href = currentDownloadUrl;
         setState("正在開啟下載");
         showNotice(currentFallback
-          ? "正在交給瀏覽器下載完整 MP4。若仍未保存，請回本頁按「本機下載頁」或「原始影片」。"
+          ? "正在交給瀏覽器下載完整 MP4。若仍未保存，請回本頁按「備援下載 MP4」或「原始影片」。"
           : "正在交給瀏覽器下載。若通訊軟體內建瀏覽器無法保存，請用右上角選單改用系統瀏覽器開啟。");
       });
 
       localFallback.addEventListener("click", (event) => {
-        if (!currentFallback) return;
-        if (currentSource === "local-fast" && !warmupReady) {
+        if (currentSource === "local-fast") {
           event.preventDefault();
-          startDownloadWarmup(true, "fallback");
+          startDownloadWarmup(true);
           return;
         }
+        if (!currentFallback) return;
         showNotice("正在開啟車機本機下載頁；手機需與車機在同一個 Wi-Fi 或熱點網路。");
       });
 
