@@ -17,6 +17,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
   min-width: 0;
   background: var(--bg);
@@ -33,7 +37,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -117,7 +122,8 @@ select {
   gap: 14px;
 }
 
-.upload-form label {
+.upload-form label,
+.mode-card {
   display: grid;
   gap: 8px;
   min-width: 0;
@@ -126,15 +132,108 @@ select {
 }
 
 .upload-form input,
-.upload-form select {
+.upload-form select,
+.upload-form textarea {
   width: 100%;
-  min-height: 54px;
   min-width: 0;
-  padding: 0 14px;
   color: #06101a;
   background: #f5fbff;
   border: 1px solid transparent;
   border-radius: 8px;
+}
+
+.upload-form input,
+.upload-form select {
+  min-height: 54px;
+  padding: 0 14px;
+}
+
+.upload-form textarea {
+  min-height: 104px;
+  padding: 12px 14px;
+  resize: vertical;
+}
+
+.mode-group,
+.new-app-fields {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.mode-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.mode-group legend {
+  grid-column: 1 / -1;
+  margin: 0 0 2px;
+  color: #fff;
+  font-weight: 900;
+}
+
+.mode-card {
+  position: relative;
+  min-height: 92px;
+  padding: 14px 14px 14px 48px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.mode-card input {
+  position: absolute;
+  top: 19px;
+  left: 14px;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  padding: 0;
+  accent-color: var(--green);
+}
+
+.mode-card strong,
+.mode-card span {
+  min-width: 0;
+}
+
+.mode-card span {
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.mode-card:has(input:checked) {
+  border-color: rgba(53, 231, 164, 0.55);
+  background: rgba(53, 231, 164, 0.1);
+}
+
+.mode-card.is-selected {
+  border-color: rgba(53, 231, 164, 0.55);
+  background: rgba(53, 231, 164, 0.1);
+}
+
+.new-app-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(133, 206, 255, 0.18);
+  border-radius: 8px;
+}
+
+.new-app-fields[hidden] {
+  display: none;
+}
+
+.wide-field {
+  grid-column: 1 / -1;
 }
 
 .drop-zone {
@@ -302,6 +401,11 @@ select {
   }
 
   .upload-form {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-group,
+  .new-app-fields {
     grid-template-columns: 1fr;
   }
 

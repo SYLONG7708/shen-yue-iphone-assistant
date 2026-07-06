@@ -14,12 +14,26 @@
       <div class="upload-title">
         <p>Shen Yue Update Uploader</p>
         <h1 id="upload-title">申悅更新中心一鍵上傳</h1>
-        <span>選 APK 後會直接替換 GitHub Release 檔案，並同步更新中心清單。</span>
+        <span>選 APK 後會直接新增或替換 GitHub Release 檔案，並同步更新中心清單。</span>
       </div>
 
       <div class="status-strip" data-connection-status>尚未連線上傳服務</div>
 
       <form class="upload-form" data-upload-form>
+        <fieldset class="mode-group" data-mode-group>
+          <legend>上傳模式</legend>
+          <label class="mode-card">
+            <input name="uploadMode" type="radio" value="replace" checked>
+            <strong>替換既有 APK</strong>
+            <span>更新已在清單中的 App</span>
+          </label>
+          <label class="mode-card">
+            <input name="uploadMode" type="radio" value="create">
+            <strong>新增新的 APK</strong>
+            <span>建立新的更新中心項目</span>
+          </label>
+        </fieldset>
+
         <label>
           上傳服務網址
           <input name="apiBase" type="url" inputmode="url" placeholder="例如 https://xxxx.trycloudflare.com" autocomplete="off">
@@ -28,7 +42,7 @@
           URL 密鑰
           <input name="uploadKey" type="password" placeholder="由啟動工具自動帶入" autocomplete="off">
         </label>
-        <label>
+        <label data-replace-field>
           替換目標
           <select name="itemId" data-target-select>
             <option value="">自動依 APK 套件判斷</option>
@@ -39,9 +53,36 @@
           <input name="assetName" type="text" placeholder="自動沿用原檔名，新增時可留空">
         </label>
 
+        <div class="new-app-fields" data-new-app-fields hidden>
+          <label>
+            App 顯示名稱
+            <input name="appName" type="text" placeholder="未填會使用 APK 內建名稱">
+          </label>
+          <label>
+            分類
+            <input name="category" type="text" placeholder="例如 影音播放、導航工具">
+          </label>
+          <label class="wide-field">
+            App 介紹
+            <textarea name="description" rows="3" placeholder="未填會使用預設介紹"></textarea>
+          </label>
+          <label>
+            圖標網址
+            <input name="iconUrl" type="url" inputmode="url" placeholder="可留空使用預設圖標">
+          </label>
+          <label>
+            詳情圖片網址
+            <input name="imageUrl" type="url" inputmode="url" placeholder="可留空使用預設圖片">
+          </label>
+          <label class="wide-field">
+            更新說明
+            <textarea name="changelog" rows="3" placeholder="一行一條，未填會自動產生"></textarea>
+          </label>
+        </div>
+
         <div class="drop-zone" data-drop-zone>
           <input name="apkFile" type="file" accept=".apk,application/vnd.android.package-archive" data-apk-file>
-          <strong>選擇 APK 並立即替換</strong>
+          <strong data-drop-title>選擇 APK 並立即替換</strong>
           <span data-file-meta>支援拖放 APK；選定後自動開始上傳。</span>
         </div>
       </form>

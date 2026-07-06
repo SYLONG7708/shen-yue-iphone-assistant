@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v248-public-update-uploader";
+const cacheName = "shen-yue-assistant-v249-uploader-create-apk";
 const assets = [
   "./",
   "./index.html",

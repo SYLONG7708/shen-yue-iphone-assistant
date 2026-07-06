@@ -2,12 +2,16 @@ const form = document.querySelector("[data-upload-form]");
 const targetSelect = document.querySelector("[data-target-select]");
 const apkFileInput = document.querySelector("[data-apk-file]");
 const dropZone = document.querySelector("[data-drop-zone]");
+const dropTitle = document.querySelector("[data-drop-title]");
 const fileMeta = document.querySelector("[data-file-meta]");
 const statusBox = document.querySelector("[data-connection-status]");
 const progressBar = document.querySelector("[data-progress-bar]");
 const resultOutput = document.querySelector("[data-result-output]");
 const appList = document.querySelector("[data-app-list]");
 const healthList = document.querySelector("[data-health-list]");
+const replaceField = document.querySelector("[data-replace-field]");
+const newAppFields = document.querySelector("[data-new-app-fields]");
+const modeCards = Array.from(document.querySelectorAll(".mode-card"));
 
 const settingsKey = "shenYuePublicUploaderSettings";
 let currentItems = [];
@@ -31,17 +35,24 @@ function loadSettings() {
   const query = getQuery();
   const apiBase = query.get("api") || saved.apiBase || "";
   const uploadKey = query.get("key") || query.get("k") || saved.uploadKey || "";
+  const uploadMode = query.get("mode") || saved.uploadMode || "replace";
   form.elements.apiBase.value = apiBase;
   form.elements.uploadKey.value = uploadKey;
+  form.elements.uploadMode.value = uploadMode === "create" ? "create" : "replace";
 }
 
 function saveSettings() {
   const data = {
     apiBase: normalizeApiBase(form.elements.apiBase.value),
-    uploadKey: form.elements.uploadKey.value.trim()
+    uploadKey: form.elements.uploadKey.value.trim(),
+    uploadMode: getUploadMode()
   };
   localStorage.setItem(settingsKey, JSON.stringify(data));
   return data;
+}
+
+function getUploadMode() {
+  return form.elements.uploadMode.value === "create" ? "create" : "replace";
 }
 
 function normalizeApiBase(value) {
@@ -111,6 +122,22 @@ function writeResult(data) {
   resultOutput.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
+function updateModeUi() {
+  const mode = getUploadMode();
+  const isCreate = mode === "create";
+  replaceField.hidden = isCreate;
+  newAppFields.hidden = !isCreate;
+  targetSelect.disabled = isCreate;
+  dropTitle.textContent = isCreate ? "選擇 APK 並立即新增" : "選擇 APK 並立即替換";
+  fileMeta.textContent = isCreate
+    ? "支援拖放 APK；選定後自動建立新項目。"
+    : "支援拖放 APK；選定後自動開始上傳。";
+  modeCards.forEach((card) => {
+    const input = card.querySelector("input");
+    card.classList.toggle("is-selected", input?.checked);
+  });
+}
+
 function renderHealth(status) {
   const rows = [
     ["Release", status.releaseTag ? `${status.githubRepo} / ${status.releaseTag}` : "待檢查"],
@@ -178,21 +205,42 @@ function validateFile(file) {
   if (!/\.apk$/i.test(file.name)) throw new Error("請選擇 .apk 檔。");
 }
 
+function getUploadParams() {
+  const mode = getUploadMode();
+  const params = {
+    mode,
+    assetName: form.elements.assetName.value.trim()
+  };
+
+  if (mode === "replace") {
+    params.itemId = form.elements.itemId.value.trim();
+    return params;
+  }
+
+  params.appName = form.elements.appName.value.trim();
+  params.category = form.elements.category.value.trim();
+  params.description = form.elements.description.value.trim();
+  params.iconUrl = form.elements.iconUrl.value.trim();
+  params.imageUrl = form.elements.imageUrl.value.trim();
+  params.changelog = form.elements.changelog.value.trim();
+  return params;
+}
+
 function uploadFile(file) {
   validateFile(file);
   const settings = saveSettings();
   if (!settings.apiBase) throw new Error("尚未設定上傳服務網址。");
 
-  const itemId = form.elements.itemId.value.trim();
-  const assetName = form.elements.assetName.value.trim();
-  const targetLabel = targetSelect.selectedOptions[0]?.textContent || "自動比對";
+  const params = getUploadParams();
+  const isCreate = params.mode === "create";
+  const targetLabel = isCreate ? (params.appName || "新增 APK") : (targetSelect.selectedOptions[0]?.textContent || "自動比對");
   fileMeta.textContent = `${file.name} / ${formatSize(file.size)} / ${targetLabel}`;
   setProgress(0);
-  setStatus("正在上傳 APK，請不要關閉頁面。");
+  setStatus(isCreate ? "正在新增 APK，請不要關閉頁面。" : "正在上傳 APK，請不要關閉頁面。");
   writeResult("上傳中...");
 
   const xhr = new XMLHttpRequest();
-  xhr.open("PUT", apiUrl("api/upload", { itemId, assetName }));
+  xhr.open("PUT", apiUrl("api/upload", params));
   xhr.setRequestHeader("Content-Type", "application/vnd.android.package-archive");
   if (settings.uploadKey) xhr.setRequestHeader("X-Upload-Token", settings.uploadKey);
   xhr.setRequestHeader("X-File-Name", encodeURIComponent(file.name));
@@ -217,7 +265,7 @@ function uploadFile(file) {
       return;
     }
     setProgress(100);
-    setStatus(`已完成：${data.item?.name || file.name} 已替換`, "ok");
+    setStatus(`已完成：${data.item?.name || file.name} 已${data.operation === "create" ? "新增" : "替換"}`, "ok");
     writeResult(data);
     loadStatus();
   };
@@ -243,9 +291,16 @@ function handleFiles(files) {
 }
 
 loadSettings();
+updateModeUi();
 
 form.elements.apiBase.addEventListener("change", loadStatus);
 form.elements.uploadKey.addEventListener("change", loadStatus);
+Array.from(form.elements.uploadMode).forEach((input) => {
+  input.addEventListener("change", () => {
+    updateModeUi();
+    saveSettings();
+  });
+});
 targetSelect.addEventListener("change", updateAssetFromSelection);
 apkFileInput.addEventListener("change", () => handleFiles(apkFileInput.files));
 

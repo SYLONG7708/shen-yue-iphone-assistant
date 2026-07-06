@@ -56,15 +56,17 @@
 <body>
   <main>
     <h1>申悅更新中心上傳教學</h1>
-    <p>這份文件說明兩種更新中心新增方式：App 內表單同步到低權限 Google Apps Script，以及在電腦上用工具自動發布正式 APK 並同步 Apps Script。</p>
+    <p>這份文件說明更新中心新增與替換方式：公開頁一鍵新增/替換、App 內表單同步到低權限 Google Apps Script，以及在電腦上用工具自動發布正式 APK 並同步 Apps Script。</p>
 
     <section>
-      <h2>方式零：公開頁一鍵替換 APK</h2>
+      <h2>方式零：公開頁一鍵新增或替換 APK</h2>
       <ol>
         <li>先在電腦啟動 <code>SYLONG7708/update</code> 裡的 <code>tools/start-update-uploader.ps1</code>。</li>
         <li>工具會顯示一個公開上傳網址；把網址給需要上傳的人即可。</li>
-        <li>打開網址後選 APK，系統會自動替換 GitHub Release 檔案、更新 <code>updates.json</code>，並同步 Apps Script 更新清單。</li>
-        <li>若沒有選指定 App，系統會依 APK 的套件名稱自動比對現有更新項目。</li>
+        <li>打開網址後選「替換既有 APK」或「新增新的 APK」。</li>
+        <li>替換模式可指定清單中的 App；若沒有指定，系統會依 APK 的套件名稱自動比對現有更新項目。</li>
+        <li>新增模式可填 App 顯示名稱、分類、介紹、圖標網址與詳情圖片網址；未填會使用 APK 內部資訊與預設圖片。</li>
+        <li>選 APK 後，系統會自動上傳 GitHub Release 檔案、更新 <code>updates.json</code>，並同步 Apps Script 更新清單。</li>
       </ol>
       <p class="warn">不要把 GitHub token 寫在網頁裡；公開頁只連到後端服務，GitHub 權限只留在啟動工具的電腦端。</p>
     </section>
