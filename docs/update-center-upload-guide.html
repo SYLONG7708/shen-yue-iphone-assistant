@@ -59,6 +59,17 @@
     <p>這份文件說明兩種更新中心新增方式：App 內表單同步到低權限 Google Apps Script，以及在電腦上用工具自動發布正式 APK 並同步 Apps Script。</p>
 
     <section>
+      <h2>方式零：公開頁一鍵替換 APK</h2>
+      <ol>
+        <li>先在電腦啟動 <code>SYLONG7708/update</code> 裡的 <code>tools/start-update-uploader.ps1</code>。</li>
+        <li>工具會顯示一個公開上傳網址；把網址給需要上傳的人即可。</li>
+        <li>打開網址後選 APK，系統會自動替換 GitHub Release 檔案、更新 <code>updates.json</code>，並同步 Apps Script 更新清單。</li>
+        <li>若沒有選指定 App，系統會依 APK 的套件名稱自動比對現有更新項目。</li>
+      </ol>
+      <p class="warn">不要把 GitHub token 寫在網頁裡；公開頁只連到後端服務，GitHub 權限只留在啟動工具的電腦端。</p>
+    </section>
+
+    <section>
       <h2>方式一：App 內新增應用</h2>
       <ol>
         <li>進入「更新」分頁，按「新增應用」。</li>

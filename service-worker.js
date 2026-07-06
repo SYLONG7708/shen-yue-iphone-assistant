@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v247-replay-no-local-watch";
+const cacheName = "shen-yue-assistant-v248-public-update-uploader";
 const assets = [
   "./",
   "./index.html",
@@ -7,6 +7,9 @@ const assets = [
   "./updates.json",
   "./shen-yue-assistant-content.json",
   "./manifest.webmanifest",
+  "./update-uploader/index.html",
+  "./update-uploader/styles.css",
+  "./update-uploader/app.js",
   "./replay-center/index.html",
   "./replay-center/compat-app.js",
   "./replay-center/watch/index.html",

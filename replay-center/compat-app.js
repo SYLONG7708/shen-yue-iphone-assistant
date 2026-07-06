@@ -8,11 +8,11 @@
   var scanPollTimer = 0
   var uploadPollTimer = 0
   var autoUploadTimer = 0
-  var preferredHost = 'https://shanghai-hiv-teens-halifax.trycloudflare.com'
+  var preferredHost = ''
 
   var defaults = {
-    endpoint: preferredHost + '/api/upload/{filename}',
-    oneTimeEndpoint: preferredHost + '/api/one-time-links',
+    endpoint: '',
+    oneTimeEndpoint: '',
     mode: 'PUT',
     token: '',
   }
@@ -62,8 +62,12 @@
     el.tokenInput.value = settings.token || ''
 
     bindInputs()
-    setStatus('ready', '已套用公開 HTTPS 上傳伺服器 ' + preferredHost + '，請選擇影片上傳。')
-    window.setTimeout(pingServer, 400)
+    if (el.endpointInput.value || el.oneTimeInput.value) {
+      setStatus('ready', '已套用上傳服務，請選擇影片上傳。')
+      window.setTimeout(pingServer, 400)
+    } else {
+      setStatus('ready', '請先設定上傳 API，再選擇影片上傳。')
+    }
 
     if (hasNativeVideoBridge()) {
       el.nativeVideoTools.className = 'native-video-tools'

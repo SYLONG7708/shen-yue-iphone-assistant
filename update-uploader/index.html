@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#071018">
+  <title>申悅更新中心一鍵上傳</title>
+  <link rel="icon" href="../assets/app-logo.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="upload-shell">
+    <section class="upload-main" aria-labelledby="upload-title">
+      <div class="upload-title">
+        <p>Shen Yue Update Uploader</p>
+        <h1 id="upload-title">申悅更新中心一鍵上傳</h1>
+        <span>選 APK 後會直接替換 GitHub Release 檔案，並同步更新中心清單。</span>
+      </div>
+
+      <div class="status-strip" data-connection-status>尚未連線上傳服務</div>
+
+      <form class="upload-form" data-upload-form>
+        <label>
+          上傳服務網址
+          <input name="apiBase" type="url" inputmode="url" placeholder="例如 https://xxxx.trycloudflare.com" autocomplete="off">
+        </label>
+        <label>
+          URL 密鑰
+          <input name="uploadKey" type="password" placeholder="由啟動工具自動帶入" autocomplete="off">
+        </label>
+        <label>
+          替換目標
+          <select name="itemId" data-target-select>
+            <option value="">自動依 APK 套件判斷</option>
+          </select>
+        </label>
+        <label>
+          Release 檔名
+          <input name="assetName" type="text" placeholder="自動沿用原檔名，新增時可留空">
+        </label>
+
+        <div class="drop-zone" data-drop-zone>
+          <input name="apkFile" type="file" accept=".apk,application/vnd.android.package-archive" data-apk-file>
+          <strong>選擇 APK 並立即替換</strong>
+          <span data-file-meta>支援拖放 APK；選定後自動開始上傳。</span>
+        </div>
+      </form>
+
+      <div class="progress-wrap" aria-label="上傳進度">
+        <span data-progress-bar></span>
+      </div>
+
+      <section class="result-panel" data-result-panel>
+        <h2>執行結果</h2>
+        <pre data-result-output>等待上傳。</pre>
+      </section>
+    </section>
+
+    <aside class="upload-side" aria-label="更新中心狀態">
+      <div class="side-block">
+        <h2>目前清單</h2>
+        <div class="app-list" data-app-list></div>
+      </div>
+      <div class="side-block">
+        <h2>服務狀態</h2>
+        <dl class="health-list" data-health-list>
+          <div><dt>Release</dt><dd>待檢查</dd></div>
+          <div><dt>Manifest</dt><dd>待檢查</dd></div>
+          <div><dt>Apps Script</dt><dd>待檢查</dd></div>
+        </dl>
+      </div>
+    </aside>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

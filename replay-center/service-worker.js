@@ -1,4 +1,4 @@
-const CACHE_NAME = 'replay-center-v19-no-local-watch'
+const CACHE_NAME = 'replay-center-v20-public-uploader-cleanup'
 const STATIC_ASSETS = ['/', '/remote-config.json', '/manifest.webmanifest', '/favicon.svg']
 
 self.addEventListener('install', (event) => {
