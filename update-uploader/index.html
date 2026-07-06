@@ -80,6 +80,17 @@
           </label>
         </div>
 
+        <section class="icon-uploader" aria-label="圖標更換">
+          <div class="icon-preview-wrap">
+            <img data-icon-preview src="../assets/app-logo.png" alt="">
+          </div>
+          <label class="icon-file-zone">
+            <input name="iconFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-icon-file>
+            <strong data-icon-title>選擇圖標圖片</strong>
+            <span data-icon-meta>替換模式會立即更換既有項目；新增模式會在 APK 新增後自動套用。</span>
+          </label>
+        </section>
+
         <div class="drop-zone" data-drop-zone>
           <input name="apkFile" type="file" accept=".apk,application/vnd.android.package-archive" data-apk-file>
           <strong data-drop-title>選擇 APK 並立即替換</strong>

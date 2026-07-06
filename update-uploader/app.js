@@ -1,9 +1,12 @@
 const form = document.querySelector("[data-upload-form]");
 const targetSelect = document.querySelector("[data-target-select]");
 const apkFileInput = document.querySelector("[data-apk-file]");
+const iconFileInput = document.querySelector("[data-icon-file]");
 const dropZone = document.querySelector("[data-drop-zone]");
 const dropTitle = document.querySelector("[data-drop-title]");
 const fileMeta = document.querySelector("[data-file-meta]");
+const iconPreview = document.querySelector("[data-icon-preview]");
+const iconMeta = document.querySelector("[data-icon-meta]");
 const statusBox = document.querySelector("[data-connection-status]");
 const progressBar = document.querySelector("[data-progress-bar]");
 const resultOutput = document.querySelector("[data-result-output]");
@@ -15,6 +18,7 @@ const modeCards = Array.from(document.querySelectorAll(".mode-card"));
 
 const settingsKey = "shenYuePublicUploaderSettings";
 let currentItems = [];
+let pendingIconFile = null;
 
 function getQuery() {
   const query = new URLSearchParams(location.search);
@@ -122,6 +126,13 @@ function writeResult(data) {
   resultOutput.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
+function updateIconPreviewFromSelection() {
+  if (pendingIconFile) return;
+  const selected = targetSelect.selectedOptions[0];
+  const icon = selected?.dataset?.icon || "";
+  iconPreview.src = resolveAssetUrl(icon || "../assets/app-logo.png");
+}
+
 function updateModeUi() {
   const mode = getUploadMode();
   const isCreate = mode === "create";
@@ -136,6 +147,13 @@ function updateModeUi() {
     const input = card.querySelector("input");
     card.classList.toggle("is-selected", input?.checked);
   });
+  if (isCreate && pendingIconFile) {
+    iconMeta.textContent = `${pendingIconFile.name} / 新增 APK 完成後自動套用`;
+  } else if (!pendingIconFile) {
+    iconMeta.textContent = isCreate
+      ? "可先選圖標；APK 新增完成後會自動套用。"
+      : "選擇既有目標後，選圖標會立即更換。";
+  }
 }
 
 function renderHealth(status) {
@@ -153,8 +171,9 @@ function renderApps(items) {
   currentItems = Array.isArray(items) ? items : [];
   targetSelect.innerHTML = '<option value="">自動依 APK 套件判斷</option>' + currentItems.map((item) => {
     const asset = getAssetNameFromUrl(item.apkUrl);
-    return `<option value="${escapeHtml(item.id || item.packageName || asset)}" data-asset="${escapeHtml(asset)}">${escapeHtml(item.name || item.packageName || asset)}｜${escapeHtml(item.versionName || "未標示")}</option>`;
+    return `<option value="${escapeHtml(item.id || item.packageName || asset)}" data-asset="${escapeHtml(asset)}" data-icon="${escapeHtml(item.iconUrl || item.imageUrl || "")}" data-package="${escapeHtml(item.packageName || "")}">${escapeHtml(item.name || item.packageName || asset)}｜${escapeHtml(item.versionName || "未標示")}</option>`;
   }).join("");
+  updateIconPreviewFromSelection();
 
   appList.innerHTML = currentItems.map((item) => {
     const asset = getAssetNameFromUrl(item.apkUrl);
@@ -170,7 +189,7 @@ function renderApps(items) {
   }).join("") || '<p class="status-strip">目前清單沒有項目。</p>';
 }
 
-async function loadStatus() {
+async function loadStatus(options = {}) {
   saveSettings();
   setStatus("正在連線上傳服務...");
   try {
@@ -180,12 +199,14 @@ async function loadStatus() {
     renderApps(data.apps || []);
     renderHealth(data);
     setStatus(`已連線：目前 ${data.appsCount || 0} 個更新項目`, "ok");
-    writeResult({
-      ok: true,
-      message: "上傳服務可用",
-      uploaderUrl: normalizeApiBase(form.elements.apiBase.value),
-      apps: data.appsCount || 0
-    });
+    if (!options.keepResult) {
+      writeResult({
+        ok: true,
+        message: "上傳服務可用",
+        uploaderUrl: normalizeApiBase(form.elements.apiBase.value),
+        apps: data.appsCount || 0
+      });
+    }
   } catch (error) {
     setStatus(`連線失敗：${error.message || error}`, "error");
     writeResult("請確認上傳服務已啟動，或檢查網址與 URL 密鑰。");
@@ -198,11 +219,78 @@ function updateAssetFromSelection() {
   if (asset && !form.elements.assetName.value.trim()) {
     form.elements.assetName.value = asset;
   }
+  updateIconPreviewFromSelection();
 }
 
 function validateFile(file) {
   if (!file) throw new Error("沒有選擇 APK 檔案。");
   if (!/\.apk$/i.test(file.name)) throw new Error("請選擇 .apk 檔。");
+}
+
+function validateIconFile(file) {
+  if (!file) throw new Error("沒有選擇圖標圖片。");
+  if (!/^image\/(png|jpeg|webp|gif)$/i.test(file.type) && !/\.(png|jpe?g|webp|gif)$/i.test(file.name)) {
+    throw new Error("請選擇 PNG、JPG、WEBP 或 GIF 圖片。");
+  }
+}
+
+function getSelectedTargetItem() {
+  const value = form.elements.itemId.value.trim();
+  if (!value) return null;
+  return currentItems.find((item) => {
+    const asset = getAssetNameFromUrl(item.apkUrl);
+    return [item.id, item.packageName, item.name, asset].includes(value);
+  }) || null;
+}
+
+function uploadIconFile(file, targetItem = null) {
+  validateIconFile(file);
+  const settings = saveSettings();
+  if (!settings.apiBase) throw new Error("尚未設定上傳服務網址。");
+
+  const selected = targetItem || getSelectedTargetItem();
+  if (!selected) {
+    throw new Error("請先選擇要更換圖標的既有 App；新增模式可先選圖標，再選 APK 自動套用。");
+  }
+
+  const params = {
+    itemId: selected.id || selected.packageName || selected.name || "",
+    packageName: selected.packageName || ""
+  };
+
+  setProgress(0);
+  setStatus(`正在更換圖標：${selected.name || selected.packageName || file.name}`);
+
+  return new Promise((resolveUpload, rejectUpload) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", apiUrl("api/icon", params));
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    if (settings.uploadKey) xhr.setRequestHeader("X-Upload-Token", settings.uploadKey);
+    xhr.setRequestHeader("X-File-Name", encodeURIComponent(file.name));
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        setProgress((event.loaded / event.total) * 96);
+      }
+    };
+
+    xhr.onload = () => {
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText || "{}");
+      } catch {
+        data = { ok: false, message: xhr.responseText || "上傳服務回應格式錯誤" };
+      }
+      if (xhr.status < 200 || xhr.status >= 300 || data.ok === false) {
+        rejectUpload(new Error(data.message || `HTTP ${xhr.status}`));
+        return;
+      }
+      resolveUpload(data);
+    };
+
+    xhr.onerror = () => rejectUpload(new Error("圖標上傳失敗：網路連線中斷。"));
+    xhr.send(file);
+  });
 }
 
 function getUploadParams() {
@@ -264,10 +352,24 @@ function uploadFile(file) {
       setProgress(0);
       return;
     }
-    setProgress(100);
-    setStatus(`已完成：${data.item?.name || file.name} 已${data.operation === "create" ? "新增" : "替換"}`, "ok");
-    writeResult(data);
-    loadStatus();
+    const finish = async () => {
+      let finalResult = data;
+      if (pendingIconFile && data.item) {
+        const iconResult = await uploadIconFile(pendingIconFile, data.item);
+        finalResult = { apk: data, icon: iconResult };
+        pendingIconFile = null;
+        iconFileInput.value = "";
+      }
+      setProgress(100);
+      setStatus(`已完成：${data.item?.name || file.name} 已${data.operation === "create" ? "新增" : "替換"}${finalResult.icon ? "，圖標已套用" : ""}`, "ok");
+      writeResult(finalResult);
+      await loadStatus({ keepResult: true });
+    };
+    finish().catch((error) => {
+      setStatus(`APK 已完成，但圖標套用失敗：${error.message || error}`, "error");
+      writeResult({ apk: data, iconError: error.message || String(error) });
+      loadStatus({ keepResult: true });
+    });
   };
 
   xhr.onerror = () => {
@@ -290,6 +392,39 @@ function handleFiles(files) {
   }
 }
 
+function handleIconFiles(files) {
+  const file = files && files[0];
+  try {
+    validateIconFile(file);
+    pendingIconFile = file;
+    iconPreview.src = URL.createObjectURL(file);
+    iconMeta.textContent = `${file.name} / ${formatSize(file.size)}`;
+
+    if (getUploadMode() === "create") {
+      setStatus("圖標已選擇；選 APK 新增完成後會自動套用。", "ok");
+      writeResult("圖標已暫存，請繼續選擇 APK。");
+      return;
+    }
+
+    uploadIconFile(file).then(async (data) => {
+      pendingIconFile = null;
+      iconFileInput.value = "";
+      setProgress(100);
+      setStatus(`已完成：${data.item?.name || "目標 App"} 圖標已更換`, "ok");
+      writeResult(data);
+      await loadStatus({ keepResult: true });
+    }).catch((error) => {
+      setStatus(`圖標更換失敗：${error.message || error}`, "error");
+      writeResult(error.message || String(error));
+      setProgress(0);
+    });
+  } catch (error) {
+    setStatus(`無法更換圖標：${error.message || error}`, "error");
+    writeResult(error.message || String(error));
+    setProgress(0);
+  }
+}
+
 loadSettings();
 updateModeUi();
 
@@ -303,6 +438,7 @@ Array.from(form.elements.uploadMode).forEach((input) => {
 });
 targetSelect.addEventListener("change", updateAssetFromSelection);
 apkFileInput.addEventListener("change", () => handleFiles(apkFileInput.files));
+iconFileInput.addEventListener("change", () => handleIconFiles(iconFileInput.files));
 
 dropZone.addEventListener("dragover", (event) => {
   event.preventDefault();

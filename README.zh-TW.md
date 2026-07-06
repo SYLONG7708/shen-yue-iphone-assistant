@@ -10,7 +10,7 @@
 
 - 更新中心新增公開一鍵上傳頁：`update-uploader/index.html`。
 - 公開頁需搭配 `SYLONG7708/update` 專案的 `tools/start-update-uploader.ps1` 後端工具；選 APK 後可直接新增或替換 `apk-cloud` Release 資產、更新 `updates.json` 並同步 Apps Script。
-- 公開頁已支援「替換既有 APK」與「新增新的 APK」兩種模式；新增時可填 App 顯示名稱、分類、介紹、圖標網址、詳情圖片網址與更新說明，未填會用 APK 內部資訊與預設圖片補齊。
+- 公開頁已支援「替換既有 APK」、「新增新的 APK」與「圖標更換」。新增時可填 App 顯示名稱、分類、介紹、圖標網址、詳情圖片網址與更新說明，或直接選圖標圖片檔讓後端上傳到 `assets/update-icons/`。
 - 更新中心頁面新增繁體中文表格式上傳表單。
 - 新增 App 時選 APK、第一張圖片、第二張圖片即可；應用圖標、應用名稱、類別、介紹、App 容量、套件名稱、版本名稱、版本碼、最低 Android、目標 SDK 與 SHA-256 會自動偵測。
 - 若 APK 無法在目前瀏覽器解析，仍保留手動填寫欄位作為備援。
