@@ -230,6 +230,7 @@
           <div id="sendPanel" class="send-panel hidden">
             <p>下載完成，可發送到其他 APP</p>
             <div class="send-actions">
+              <button type="button" id="sendDownload">儲存影片</button>
               <button type="button" id="sendSystem">系統分享</button>
               <button type="button" id="sendLine">LINE</button>
               <button type="button" id="sendFacebook">Facebook</button>
@@ -426,6 +427,7 @@
       const downloadPercent = document.getElementById("downloadPercent");
       const downloadProgressBar = document.getElementById("downloadProgressBar");
       const sendPanel = document.getElementById("sendPanel");
+      const sendDownload = document.getElementById("sendDownload");
       const sendSystem = document.getElementById("sendSystem");
       const sendLine = document.getElementById("sendLine");
       const sendFacebook = document.getElementById("sendFacebook");
@@ -608,10 +610,25 @@
 
       function fallbackBrowserDownload(url) {
         setDownloadProgress(100);
-        setState("正在開啟下載");
-        window.setTimeout(() => {
-          location.href = url;
-        }, 80);
+        setState("下載完成 100%");
+        currentDownloadUrl = url || currentDownloadUrl || currentVideo;
+        showSendPanel(null);
+        triggerUrlDownload(currentDownloadUrl, currentName, true);
+      }
+
+      function triggerUrlDownload(url, fileName, autoAttempt = false) {
+        if (!url) return;
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = fileName || "replay-video.mp4";
+        anchor.rel = "noopener";
+        if (autoAttempt) anchor.target = "_blank";
+        anchor.style.position = "fixed";
+        anchor.style.left = "-9999px";
+        anchor.style.top = "-9999px";
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
       }
 
       function triggerBlobDownload(blob, fileName) {
@@ -957,6 +974,14 @@
         if (!currentVideo) return;
         const text = encodeURIComponent(`${currentName}\n${currentVideo}`);
         location.href = `https://line.me/R/msg/text/?${text}`;
+      });
+
+      sendDownload.addEventListener("click", () => {
+        if (downloadedBlob) {
+          triggerBlobDownload(downloadedBlob, currentName);
+          return;
+        }
+        triggerUrlDownload(currentDownloadUrl || currentVideo, currentName, false);
       });
 
       sendSystem.addEventListener("click", async () => {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'replay-center-v23-share-after-download'
+const CACHE_NAME = 'replay-center-v24-complete-share-scan'
 const STATIC_ASSETS = ['/', '/remote-config.json', '/manifest.webmanifest', '/favicon.svg']
 
 self.addEventListener('install', (event) => {
