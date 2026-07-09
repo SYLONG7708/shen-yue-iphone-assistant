@@ -1,4 +1,4 @@
-const CACHE_NAME = 'replay-center-v21-auto-download-progress'
+const CACHE_NAME = 'replay-center-v22-cloud-only-auto-download'
 const STATIC_ASSETS = ['/', '/remote-config.json', '/manifest.webmanifest', '/favicon.svg']
 
 self.addEventListener('install', (event) => {
