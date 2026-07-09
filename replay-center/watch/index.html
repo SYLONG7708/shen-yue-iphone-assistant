@@ -27,9 +27,17 @@
           linear-gradient(135deg, #02050a 0%, #071a24 48%, #03070d 100%);
         background-size: 46px 46px, 46px 46px, auto;
       }
+      body.auto-download-mode {
+        display: grid;
+        place-items: center;
+        padding: 20px;
+      }
       main {
         max-width: 940px;
         margin: 0 auto;
+      }
+      body.auto-download-mode main {
+        width: min(420px, 100%);
       }
       header,
       section {
@@ -130,6 +138,47 @@
         color: #fde68a;
         background: rgba(120, 53, 15, 0.24);
       }
+      .download-stage {
+        display: grid;
+        gap: 22px;
+        text-align: center;
+      }
+      .download-stage strong {
+        color: #f8fdff;
+        font-size: clamp(56px, 24vw, 116px);
+        font-weight: 900;
+        line-height: 1;
+        letter-spacing: 0;
+        font-variant-numeric: tabular-nums;
+      }
+      .download-stage .bar {
+        height: 12px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(2, 6, 23, 0.92);
+      }
+      .download-stage .bar span {
+        display: block;
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, #22f2ff, #a8ff5f);
+        transition: width 0.18s ease;
+      }
+      body.auto-download-mode header,
+      body.auto-download-mode #fileName,
+      body.auto-download-mode video,
+      body.auto-download-mode .meta,
+      body.auto-download-mode .actions,
+      body.auto-download-mode .diagnostics,
+      body.auto-download-mode #notice {
+        display: none !important;
+      }
+      body.auto-download-mode section {
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        padding: 0;
+      }
       .hidden {
         display: none;
       }
@@ -154,6 +203,10 @@
       </header>
       <section>
         <p id="fileName">讀取影片中...</p>
+        <div id="autoDownloadStage" class="download-stage hidden" aria-live="polite">
+          <strong id="downloadPercent">0%</strong>
+          <div class="bar"><span id="downloadProgressBar"></span></div>
+        </div>
         <video id="player" class="hidden" preload="none" aria-hidden="true"></video>
         <div class="meta" id="meta">
           <div class="meta-row"><span>核對碼</span><strong class="value" id="uidText">-</strong></div>
@@ -233,6 +286,8 @@
       let warmupVideo = null;
       let loadToken = 0;
       let diagnosticsTimer = 0;
+      let autoDownloadMode = false;
+      let downloadInFlight = false;
 
       const MIN_READY_BYTES = 4096;
 
@@ -335,6 +390,9 @@
       const formatText = document.getElementById("formatText");
       const stateText = document.getElementById("stateText");
       const sourceText = document.getElementById("sourceText");
+      const autoDownloadStage = document.getElementById("autoDownloadStage");
+      const downloadPercent = document.getElementById("downloadPercent");
+      const downloadProgressBar = document.getElementById("downloadProgressBar");
 
       function showNotice(message, tone = "info") {
         notice.classList.remove("hidden", "error", "warn");
@@ -367,6 +425,19 @@
         copy.classList.toggle("hidden", !visible);
       }
 
+      function setAutoDownloadMode(enabled) {
+        autoDownloadMode = Boolean(enabled);
+        document.body.classList.toggle("auto-download-mode", autoDownloadMode);
+        autoDownloadStage.classList.toggle("hidden", !autoDownloadMode);
+        if (autoDownloadMode) setDownloadProgress(0);
+      }
+
+      function setDownloadProgress(value) {
+        const percent = Math.max(0, Math.min(100, Math.floor(Number(value) || 0)));
+        downloadPercent.textContent = `${percent}%`;
+        downloadProgressBar.style.width = `${percent}%`;
+      }
+
       function readyByteThreshold() {
         if (currentSize > 1024 * 1024) return Math.min(1024 * 1024, Math.max(MIN_READY_BYTES, Math.floor(currentSize / 20)));
         return MIN_READY_BYTES;
@@ -375,6 +446,7 @@
       function markWarmupReady(message) {
         warmupReady = true;
         warmupInFlight = false;
+        if (autoDownloadMode) setDownloadProgress(Math.max(12, Number(downloadPercent.textContent.replace("%", "")) || 0));
         setState("下載已預備完成");
         if (message) showNotice(message);
         if (warmupRequestedDownload) {
@@ -394,6 +466,7 @@
         if (!currentVideo || token !== warmupToken || warmupReady) return;
         warmupInFlight = true;
         warmupAttempts += 1;
+        if (autoDownloadMode) setDownloadProgress(Math.min(12, 2 + warmupAttempts * 3));
         setState("正在預備下載");
         if (userRequested) {
           showNotice("正在預備 MP4，請稍等。系統會先確認車機已準備好完整檔案，避免第一次只下載到 115 bytes。");
@@ -461,6 +534,7 @@
 
       function startDownloadWarmup(userRequested = false) {
         if (!currentVideo) return;
+        if (autoDownloadMode) setDownloadProgress(Math.max(1, Number(downloadPercent.textContent.replace("%", "")) || 0));
         if (warmupReady) {
           if (userRequested) {
             startFinalDownload();
@@ -474,15 +548,78 @@
         probeDownloadReady(warmupToken, userRequested);
       }
 
-      function startFinalDownload() {
+      async function startFinalDownload() {
         if (!currentVideo) return;
+        if (downloadInFlight) return;
+        downloadInFlight = true;
         currentDownloadUrl = withCacheBust(currentVideo, "dl");
         download.href = currentDownloadUrl;
         setState("正在下載完整 MP4");
         showNotice("正在開始下載完整 MP4。若通訊軟體內建瀏覽器不保存檔案，請用系統瀏覽器開啟本頁。");
+        try {
+          await downloadWithProgress(currentDownloadUrl);
+        } finally {
+          downloadInFlight = false;
+        }
+      }
+
+      function fallbackBrowserDownload(url) {
+        setDownloadProgress(100);
+        setState("正在開啟下載");
         window.setTimeout(() => {
-          location.href = currentDownloadUrl;
+          location.href = url;
         }, 80);
+      }
+
+      function triggerBlobDownload(blob, fileName) {
+        const objectUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = objectUrl;
+        anchor.download = fileName || "replay-video.mp4";
+        anchor.rel = "noopener";
+        anchor.style.position = "fixed";
+        anchor.style.left = "-9999px";
+        anchor.style.top = "-9999px";
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      }
+
+      async function downloadWithProgress(url) {
+        if (!window.fetch || !window.Blob || !window.URL) {
+          fallbackBrowserDownload(url);
+          return;
+        }
+
+        try {
+          setDownloadProgress(Math.max(12, Number(downloadPercent.textContent.replace("%", "")) || 0));
+          const response = await fetch(withCacheBust(url, "stream"), { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const total = Number(response.headers.get("content-length") || currentSize || 0);
+          if (!response.body || !total) {
+            fallbackBrowserDownload(url);
+            return;
+          }
+
+          const reader = response.body.getReader();
+          const chunks = [];
+          let loaded = 0;
+          while (true) {
+            const state = await reader.read();
+            if (state.done) break;
+            chunks.push(state.value);
+            loaded += state.value.byteLength;
+            setDownloadProgress((loaded * 100) / total);
+            setState(`正在下載 ${Math.min(100, Math.floor((loaded * 100) / total))}%`);
+          }
+
+          setDownloadProgress(100);
+          setState("下載完成 100%");
+          triggerBlobDownload(new Blob(chunks, { type: currentMime || response.headers.get("content-type") || "video/mp4" }), currentName);
+        } catch (error) {
+          fallbackBrowserDownload(url);
+        }
       }
 
       function destroyHls() {
@@ -612,6 +749,7 @@
         const fallback = firstValue("fallback", "localWatch", "localWatchUrl");
         const original = firstValue("original", "originalUrl");
         const source = firstValue("source");
+        const autoDownload = (firstValue("auto", "autodownload") || (source === "local-fast" ? "1" : "0")) !== "0";
         const extension = extensionFrom(rawExt || name || video);
         const mime = mimeFrom(extension, rawMime);
         const allowDownload = (firstValue("download") || "1") !== "0";
@@ -638,6 +776,7 @@
         subtitle.textContent = "手機下載與分享頁";
         hideNotice();
         diagnostics.classList.add("hidden");
+        setAutoDownloadMode(false);
 
         if (!video || !isHttpVideoUrl(video)) {
           subtitle.textContent = "影片連結不存在";
@@ -664,8 +803,10 @@
         openDirect.href = currentOriginal || video;
         setState(source === "local-fast" ? "正在預備下載" : "已準備下載或分享");
         if (source === "local-fast") {
-          showNotice("正在自動預備 MP4，完成後第一次下載就會拿到完整檔案。");
-          startDownloadWarmup(false);
+          setAutoDownloadMode(autoDownload && allowDownload);
+          warmupRequestedDownload = autoDownload && allowDownload;
+          showNotice("正在自動預備 MP4，完成後會直接下載到手機。");
+          startDownloadWarmup(autoDownload && allowDownload);
         }
       }
 

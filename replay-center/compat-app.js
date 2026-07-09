@@ -294,7 +294,7 @@
     }
     if (state.readVideoGranted || state.allFilesGranted) {
       el.nativePermissionButton.innerHTML = state.allFilesGranted ? '已可讀取所有檔案' : '已可讀取影片'
-      el.nativeVideoList.innerHTML = '<div class="result-box">固定讀取 USB 的 DCIM/CAMERA 影片；支援 MP4 與 TS，並相容 sdcard1、usb_storage、udisk 類車機掛載點。</div>'
+      el.nativeVideoList.innerHTML = '<div class="result-box">固定讀取環景、USB、內部儲存與 DVR/Record 常見影片資料夾；支援 MP4、TS、MOV、AVI、MKV、DAV 與 H264 類檔案。</div>'
       return
     }
     el.nativeVideoList.innerHTML = '<div class="result-box">車機尚未授權讀取 USB 影片，請先按「允許讀取影片」。</div>'
@@ -312,7 +312,7 @@
       setStatus('error', '目前不是 Android APK 車機模式，請使用上方選檔。')
       return
     }
-    setStatus('busy', '正在掃描 USB1/USB2 與車機實際 USB 掛載點的 DCIM/CAMERA 影片。')
+    setStatus('busy', '正在掃描環景、USB、內部儲存與 DVR/Record 常見影片資料夾。')
     el.nativeVideoList.innerHTML = '<div class="result-box">掃描中...</div>'
     clearScanPoll()
     if (canScanNativeVideosAsync()) {
@@ -330,7 +330,7 @@
         setStatus('error', escapeHtml(result.message || '掃描失敗'))
         return
       }
-      renderNativeVideos(result.items || [], result.scanRoots || [])
+      renderNativeVideos(result.items || [], result.scanRoots || [], result.scanTruncated, result.scanLimit)
     }, 60)
   }
 
@@ -345,10 +345,10 @@
     }
 
     setProgress(Math.max(8, state.progress || 8), state.status !== 'done' && state.status !== 'failed')
-    setStatus(state.status === 'failed' ? 'error' : 'busy', escapeHtml(state.message || '正在掃描 USB/DCIM/CAMERA...'))
+    setStatus(state.status === 'failed' ? 'error' : 'busy', escapeHtml(state.message || '正在掃描環景/USB/車機影片...'))
     if (state.status === 'done') {
       clearScanPoll()
-      renderNativeVideos(state.items || [], state.scanRoots || [])
+      renderNativeVideos(state.items || [], state.scanRoots || [], state.scanTruncated, state.scanLimit)
       return
     }
     if (state.status === 'failed') {
@@ -363,13 +363,13 @@
     }, 350)
   }
 
-  function renderNativeVideos(items, scanRoots) {
+  function renderNativeVideos(items, scanRoots, scanTruncated, scanLimit) {
     if (!items.length) {
       var roots = Array.isArray(scanRoots) && scanRoots.length
         ? '<small>已檢查：' + escapeHtml(scanRoots.join('、')) + '</small>'
-        : '<small>沒有找到可讀取的 USB DCIM/CAMERA 資料夾。</small>'
-      el.nativeVideoList.innerHTML = '<div class="result-box">沒有找到 USB DCIM/CAMERA 內的 MP4 / TS。請確認影片放在 USB 的 DCIM/CAMERA 資料夾。' + roots + '</div>'
-      setStatus('ready', '掃描完成，但 USB DCIM/CAMERA 沒有 MP4 / TS。')
+        : '<small>沒有找到可讀取的環景/USB/車機影片資料夾。</small>'
+      el.nativeVideoList.innerHTML = '<div class="result-box">沒有找到可讀取的影片。請確認環景影片是否位於 aw3603D、360res、DCIM、DVR、Record、Movies 或 USB 儲存路徑。' + roots + '</div>'
+      setStatus('ready', '掃描完成，但沒有找到可讀取的環景影片。')
       return
     }
     el.nativeVideoList.innerHTML = ''
@@ -378,7 +378,8 @@
       fragment.appendChild(createNativeVideoItem(items[i]))
     }
     el.nativeVideoList.appendChild(fragment)
-    setStatus('ready', '掃描完成，從 USB DCIM/CAMERA 找到 ' + items.length + ' 個影片。')
+    var suffix = scanTruncated ? '；已達掃描上限 ' + (scanLimit || items.length) + ' 筆，請分批整理資料夾。' : '。'
+    setStatus('ready', '掃描完成，找到 ' + items.length + ' 個影片' + suffix)
   }
 
   function createNativeVideoItem(item) {
@@ -726,7 +727,7 @@
       '</strong><br><br>' +
       (downloadUrl ? '下載 MP4：<br>' + escapeHtml(downloadUrl) + '<br><br>' : '') +
       (localWatchUrl && localWatchUrl !== watchUrl ? '本機下載頁：<br>' + escapeHtml(localWatchUrl) + '<br><br>' : '') +
-      '手機需與車機在同一個 Wi-Fi / 熱點網路。'
+      '手機掃碼後會自動下載，只顯示下載進度%；手機需與車機在同一個 Wi-Fi / 熱點網路。'
     return true
   }
 
@@ -923,9 +924,9 @@
     var isDirectFallback = shareResult.mode === 'direct-fallback'
     var isDirectProcessing = shareResult.mode === 'direct-processing'
     var isLocalFast = shareResult.mode === 'local-fast'
-    var qrTitle = isDirectFallback || isDirectProcessing || isLocalFast ? '掃碼開啟影片連結' : '掃碼觀看影片'
+    var qrTitle = isLocalFast ? '掃碼自動下載' : (isDirectFallback || isDirectProcessing ? '掃碼開啟影片連結' : '掃碼觀看影片')
     var qrNote = '手機掃描後可觀看並下載。'
-    if (isLocalFast) qrNote = '本機快速 QR，不需上傳；掃碼會開啟下載 MP4 與分享通訊APP頁。'
+    if (isLocalFast) qrNote = '本機快速 QR，不需上傳；掃碼後自動下載到手機，只顯示下載進度%。'
     if (isDirectProcessing) qrNote = '已先顯示影片直連 QR，正在建立一次性連結。'
     if (isDirectFallback) qrNote = '一次性 API 暫時失敗，已先顯示影片直連 QR。'
 

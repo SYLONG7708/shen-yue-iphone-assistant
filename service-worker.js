@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v250-uploader-icon-upload";
+const cacheName = "shen-yue-assistant-v251-replay-auto-download-progress";
 const assets = [
   "./",
   "./index.html",
