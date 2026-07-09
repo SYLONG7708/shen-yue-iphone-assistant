@@ -164,6 +164,24 @@
         background: linear-gradient(90deg, #22f2ff, #a8ff5f);
         transition: width 0.18s ease;
       }
+      .send-panel {
+        display: grid;
+        gap: 12px;
+        margin-top: 6px;
+      }
+      .send-panel p {
+        color: #dff9ff;
+        font-size: 18px;
+        font-weight: 800;
+      }
+      .send-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .send-actions button {
+        min-height: 48px;
+      }
       body.auto-download-mode header,
       body.auto-download-mode #fileName,
       body.auto-download-mode video,
@@ -192,6 +210,9 @@
         .meta-row {
           grid-template-columns: 78px minmax(0, 1fr);
         }
+        .send-actions {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
@@ -206,6 +227,15 @@
         <div id="autoDownloadStage" class="download-stage hidden" aria-live="polite">
           <strong id="downloadPercent">0%</strong>
           <div class="bar"><span id="downloadProgressBar"></span></div>
+          <div id="sendPanel" class="send-panel hidden">
+            <p>下載完成，可發送到其他 APP</p>
+            <div class="send-actions">
+              <button type="button" id="sendSystem">系統分享</button>
+              <button type="button" id="sendLine">LINE</button>
+              <button type="button" id="sendFacebook">Facebook</button>
+              <button type="button" id="sendWechat">微信</button>
+            </div>
+          </div>
         </div>
         <video id="player" class="hidden" preload="none" aria-hidden="true"></video>
         <div class="meta" id="meta">
@@ -288,6 +318,8 @@
       let diagnosticsTimer = 0;
       let autoDownloadMode = false;
       let downloadInFlight = false;
+      let downloadedBlob = null;
+      let downloadedFile = null;
 
       const MIN_READY_BYTES = 4096;
 
@@ -393,6 +425,11 @@
       const autoDownloadStage = document.getElementById("autoDownloadStage");
       const downloadPercent = document.getElementById("downloadPercent");
       const downloadProgressBar = document.getElementById("downloadProgressBar");
+      const sendPanel = document.getElementById("sendPanel");
+      const sendSystem = document.getElementById("sendSystem");
+      const sendLine = document.getElementById("sendLine");
+      const sendFacebook = document.getElementById("sendFacebook");
+      const sendWechat = document.getElementById("sendWechat");
 
       function showNotice(message, tone = "info") {
         notice.classList.remove("hidden", "error", "warn");
@@ -429,7 +466,10 @@
         autoDownloadMode = Boolean(enabled);
         document.body.classList.toggle("auto-download-mode", autoDownloadMode);
         autoDownloadStage.classList.toggle("hidden", !autoDownloadMode);
-        if (autoDownloadMode) setDownloadProgress(0);
+        if (autoDownloadMode) {
+          sendPanel.classList.add("hidden");
+          setDownloadProgress(0);
+        }
       }
 
       function setDownloadProgress(value) {
@@ -552,6 +592,9 @@
         if (!currentVideo) return;
         if (downloadInFlight) return;
         downloadInFlight = true;
+        downloadedBlob = null;
+        downloadedFile = null;
+        sendPanel.classList.add("hidden");
         currentDownloadUrl = withCacheBust(currentVideo, "dl");
         download.href = currentDownloadUrl;
         setState("正在下載完整 MP4");
@@ -586,6 +629,47 @@
         window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
       }
 
+      function buildShareText() {
+        return `${currentName}\n${currentVideo}`;
+      }
+
+      function openShareUrl(url) {
+        window.open(url, "_blank", "noopener");
+      }
+
+      function showSendPanel(blob) {
+        if (blob) {
+          downloadedBlob = blob;
+          try {
+            downloadedFile = new File([blob], currentName || "replay-video.mp4", { type: blob.type || currentMime || "video/mp4" });
+          } catch {
+            downloadedFile = null;
+          }
+        }
+        sendPanel.classList.remove("hidden");
+      }
+
+      async function shareToSystem() {
+        const text = buildShareText();
+        if (downloadedFile && navigator.canShare && navigator.canShare({ files: [downloadedFile] })) {
+          await navigator.share({
+            title: currentName || "回放中心影片",
+            text: currentName || "回放中心影片",
+            files: [downloadedFile]
+          });
+          return;
+        }
+        if (navigator.share) {
+          await navigator.share({
+            title: currentName || "回放中心影片",
+            text: text,
+            url: currentVideo
+          });
+          return;
+        }
+        await copyCurrentUrl("此瀏覽器沒有系統分享，已複製影片連結。");
+      }
+
       async function downloadWithProgress(url) {
         if (!window.fetch || !window.Blob || !window.URL) {
           fallbackBrowserDownload(url);
@@ -616,7 +700,9 @@
 
           setDownloadProgress(100);
           setState("下載完成 100%");
-          triggerBlobDownload(new Blob(chunks, { type: currentMime || response.headers.get("content-type") || "video/mp4" }), currentName);
+          const blob = new Blob(chunks, { type: currentMime || response.headers.get("content-type") || "video/mp4" });
+          triggerBlobDownload(blob, currentName);
+          showSendPanel(blob);
         } catch (error) {
           fallbackBrowserDownload(url);
         }
@@ -768,6 +854,9 @@
         warmupInFlight = false;
         warmupRequestedDownload = false;
         warmupAttempts = 0;
+        downloadedBlob = null;
+        downloadedFile = null;
+        sendPanel.classList.add("hidden");
         fileName.textContent = name;
         uidText.textContent = uid;
         sizeText.textContent = formatBytes(size);
@@ -868,6 +957,31 @@
         if (!currentVideo) return;
         const text = encodeURIComponent(`${currentName}\n${currentVideo}`);
         location.href = `https://line.me/R/msg/text/?${text}`;
+      });
+
+      sendSystem.addEventListener("click", async () => {
+        if (!currentVideo) return;
+        try {
+          await shareToSystem();
+        } catch {
+          await copyCurrentUrl("分享視窗未完成，已複製影片連結。");
+        }
+      });
+
+      sendLine.addEventListener("click", () => {
+        if (!currentVideo) return;
+        location.href = `https://line.me/R/msg/text/?${encodeURIComponent(buildShareText())}`;
+      });
+
+      sendFacebook.addEventListener("click", () => {
+        if (!currentVideo) return;
+        openShareUrl(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(currentVideo)}`);
+      });
+
+      sendWechat.addEventListener("click", async () => {
+        if (!currentVideo) return;
+        await copyCurrentUrl("已複製影片連結，請在微信貼上傳送。");
+        location.href = "weixin://";
       });
 
       async function copyCurrentUrl(message) {
