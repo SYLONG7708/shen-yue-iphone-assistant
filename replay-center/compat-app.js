@@ -9,6 +9,11 @@
   var uploadPollTimer = 0
   var autoUploadTimer = 0
   var preferredHost = ''
+  var nativeVideoItems = []
+  var nativeVideoVisibleCount = 200
+  var nativeVideoFilter = ''
+  var nativeVideoSourceFilter = ''
+  var NATIVE_VIDEO_PAGE_SIZE = 200
 
   var defaults = {
     endpoint: '',
@@ -294,7 +299,7 @@
     }
     if (state.readVideoGranted || state.allFilesGranted) {
       el.nativePermissionButton.innerHTML = state.allFilesGranted ? '已可讀取所有檔案' : '已可讀取影片'
-      el.nativeVideoList.innerHTML = '<div class="result-box">固定讀取環景、USB、內部儲存與 DVR/Record 常見影片資料夾；支援 MP4、TS、MOV、AVI、MKV、DAV 與 H264 類檔案。</div>'
+      el.nativeVideoList.innerHTML = '<div class="result-box">完整掃描 USB1、USB2、USB3、動態可移除磁碟、環景、DVR/Record 與 MediaStore；支援 MP4、TS、MOV、AVI、MKV、WebM、DAV、H264/H265。</div>'
       return
     }
     el.nativeVideoList.innerHTML = '<div class="result-box">車機尚未授權讀取 USB 影片，請先按「允許讀取影片」。</div>'
@@ -312,7 +317,7 @@
       setStatus('error', '目前不是 Android APK 車機模式，請使用上方選檔。')
       return
     }
-    setStatus('busy', '正在掃描環景、USB、內部儲存與 DVR/Record 常見影片資料夾。')
+    setStatus('busy', '正在完整掃描 USB1、USB2、USB3、環景與車機影片。')
     el.nativeVideoList.innerHTML = '<div class="result-box">掃描中...</div>'
     clearScanPoll()
     if (canScanNativeVideosAsync()) {
@@ -369,17 +374,115 @@
         ? '<small>已檢查：' + escapeHtml(scanRoots.join('、')) + '</small>'
         : '<small>沒有找到可讀取的環景/USB/車機影片資料夾。</small>'
       el.nativeVideoList.innerHTML = '<div class="result-box">沒有找到可讀取的影片。請確認環景影片是否位於 aw3603D、360res、DCIM、DVR、Record、Movies 或 USB 儲存路徑。' + roots + '</div>'
-      setStatus('ready', '掃描完成，但沒有找到可讀取的環景影片。')
+      setStatus('ready', '掃描完成，但沒有找到可讀取的環景或 USB1/USB2/USB3 影片。')
       return
     }
-    el.nativeVideoList.innerHTML = ''
-    var fragment = document.createDocumentFragment()
-    for (var i = 0; i < items.length; i += 1) {
-      fragment.appendChild(createNativeVideoItem(items[i]))
-    }
-    el.nativeVideoList.appendChild(fragment)
+    nativeVideoItems = items.slice().sort(function (left, right) {
+      var modified = Number(right.modified || 0) - Number(left.modified || 0)
+      if (modified) return modified
+      return String(left.name || '').localeCompare(String(right.name || ''), 'zh-Hant')
+    })
+    nativeVideoVisibleCount = NATIVE_VIDEO_PAGE_SIZE
+    renderNativeVideoBrowser(scanRoots || [])
     var suffix = scanTruncated ? '；已達掃描上限 ' + (scanLimit || items.length) + ' 筆，請分批整理資料夾。' : '。'
     setStatus('ready', '掃描完成，找到 ' + items.length + ' 個影片' + suffix)
+  }
+
+  function renderNativeVideoBrowser(scanRoots) {
+    el.nativeVideoList.innerHTML = ''
+    var controls = document.createElement('div')
+    controls.className = 'native-video-browser'
+
+    var summary = document.createElement('div')
+    summary.className = 'result-box native-video-summary'
+    var roots = Array.isArray(scanRoots) ? scanRoots : []
+    summary.textContent = '完整讀取 ' + nativeVideoItems.length + ' 個影片' + (roots.length ? '；已檢查 ' + roots.length + ' 個掃描根目錄。' : '。')
+
+    var filters = document.createElement('div')
+    filters.className = 'native-video-filters'
+    var search = document.createElement('input')
+    search.type = 'search'
+    search.placeholder = '搜尋日期、檔名、資料夾或 USB 來源'
+    search.value = nativeVideoFilter
+    search.setAttribute('aria-label', '搜尋影片')
+
+    var source = document.createElement('select')
+    source.setAttribute('aria-label', '篩選影片來源')
+    var allOption = document.createElement('option')
+    allOption.value = ''
+    allOption.textContent = '全部來源'
+    source.appendChild(allOption)
+    var sourceNames = {}
+    for (var sourceIndex = 0; sourceIndex < nativeVideoItems.length; sourceIndex += 1) {
+      var sourceName = String(nativeVideoItems[sourceIndex].source || '車機影片')
+      sourceNames[sourceName] = true
+    }
+    Object.keys(sourceNames).sort().forEach(function (sourceName) {
+      var option = document.createElement('option')
+      option.value = sourceName
+      option.textContent = sourceName
+      source.appendChild(option)
+    })
+    source.value = nativeVideoSourceFilter
+    filters.appendChild(search)
+    filters.appendChild(source)
+
+    var count = document.createElement('small')
+    count.className = 'native-video-count'
+    var list = document.createElement('div')
+    list.className = 'native-video-results'
+    var more = document.createElement('button')
+    more.type = 'button'
+    more.className = 'button native-video-more'
+    more.textContent = '顯示更多影片'
+
+    controls.appendChild(summary)
+    controls.appendChild(filters)
+    controls.appendChild(count)
+    controls.appendChild(list)
+    controls.appendChild(more)
+    el.nativeVideoList.appendChild(controls)
+
+    function filteredItems() {
+      var term = String(nativeVideoFilter || '').trim().toLowerCase()
+      return nativeVideoItems.filter(function (item) {
+        if (nativeVideoSourceFilter && String(item.source || '車機影片') !== nativeVideoSourceFilter) return false
+        if (!term) return true
+        var text = [item.name, item.path, item.source].join(' ').toLowerCase()
+        return text.indexOf(term) >= 0
+      })
+    }
+
+    function paint(resetVisible) {
+      if (resetVisible) nativeVideoVisibleCount = NATIVE_VIDEO_PAGE_SIZE
+      var filtered = filteredItems()
+      var visible = filtered.slice(0, nativeVideoVisibleCount)
+      list.innerHTML = ''
+      var fragment = document.createDocumentFragment()
+      for (var index = 0; index < visible.length; index += 1) {
+        fragment.appendChild(createNativeVideoItem(visible[index]))
+      }
+      list.appendChild(fragment)
+      count.textContent = '符合 ' + filtered.length + ' 個；目前顯示 ' + visible.length + ' 個。'
+      more.classList.toggle('hidden', visible.length >= filtered.length)
+      if (!visible.length) list.innerHTML = '<div class="result-box">沒有符合搜尋條件的影片。</div>'
+    }
+
+    var searchTimer = 0
+    search.addEventListener('input', function () {
+      nativeVideoFilter = search.value
+      window.clearTimeout(searchTimer)
+      searchTimer = window.setTimeout(function () { paint(true) }, 120)
+    })
+    source.addEventListener('change', function () {
+      nativeVideoSourceFilter = source.value
+      paint(true)
+    })
+    more.addEventListener('click', function () {
+      nativeVideoVisibleCount += NATIVE_VIDEO_PAGE_SIZE
+      paint(false)
+    })
+    paint(false)
   }
 
   function createNativeVideoItem(item) {
@@ -708,15 +811,19 @@
     setProgress(100)
     el.uploadButton.disabled = false
     var localWatchUrl = result.localWatchUrl || result.watchUrl || result.publicUrl || result.url
-    var watchUrl = result.cloudWatchUrl || localWatchUrl
+    var watchUrl = localWatchUrl || result.cloudWatchUrl
     var downloadUrl = result.downloadUrl || ''
     var originalUrl = result.originalUrl || ''
+    var receiverUrl = result.receiverUrl || ''
     showShare(
       {
         watchUrl: watchUrl,
         localWatchUrl: localWatchUrl,
         downloadUrl: downloadUrl,
         originalUrl: originalUrl,
+        qrDataUrl: result.qrDataUrl || '',
+        receiverUrl: receiverUrl,
+        receiverQrDataUrl: result.receiverQrDataUrl || '',
         mode: 'local-fast',
       },
       watchUrl
@@ -726,6 +833,7 @@
       escapeHtml(watchUrl) +
       '</strong><br><br>' +
       (downloadUrl ? '下載 MP4：<br>' + escapeHtml(downloadUrl) + '<br><br>' : '') +
+      (receiverUrl ? 'Android 完整影片接收：<br>' + escapeHtml(receiverUrl) + '<br><br>' : '') +
       (localWatchUrl && localWatchUrl !== watchUrl ? '本機下載頁：<br>' + escapeHtml(localWatchUrl) + '<br><br>' : '') +
       '手機掃碼後會自動下載，只顯示下載進度%；手機需與車機在同一個 Wi-Fi / 熱點網路。'
     return true
@@ -935,14 +1043,25 @@
       qrDataUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(watchUrl)
     }
 
-    el.qrWrap.innerHTML =
-      '<img src="' +
+    var receiverQrDataUrl = shareResult.receiverQrDataUrl || ''
+    var receiverUrl = shareResult.receiverUrl || ''
+    var qrHtml = ''
+    if (receiverQrDataUrl && receiverUrl) {
+      qrHtml =
+        '<div class="qr-option qr-option-primary"><img src="' +
+        escapeAttr(receiverQrDataUrl) +
+        '" alt="Android 完整影片分享 QR Code"><strong>Android 完整影片分享到 LINE</strong>' +
+        '<p class="muted">手機安裝同版申悅車機助手後掃此碼；原生接收至 100% 才開啟 LINE／Messenger／微信檔案分享。</p></div>'
+    }
+    qrHtml +=
+      '<div class="qr-option"><img src="' +
       escapeAttr(qrDataUrl) +
-      '" alt="一次性 QR Code"><strong>' +
+      '" alt="通用下載 QR Code"><strong>' +
       escapeHtml(qrTitle) +
       '</strong><p class="muted">' +
       escapeHtml(qrNote) +
-      '</p>'
+      '</p></div>'
+    el.qrWrap.innerHTML = qrHtml
     el.openWatchButton.href = watchUrl
     el.openWatchButton.className = 'link-button'
     el.copyWatchButton.disabled = false

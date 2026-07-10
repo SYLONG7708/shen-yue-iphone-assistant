@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "channel": "stable",
-  "updatedAt": "2026-07-06T22:25:14+08:00",
+  "updatedAt": "2026-07-10T20:18:19+08:00",
   "apps": [
     {
       "id": "tw.com.sylong.tvcar-7",
@@ -26,16 +26,16 @@
       ]
     },
     {
-      "id": "tw.com.shenyue.assistant-110",
+      "id": "tw.com.shenyue.assistant-135",
       "name": "申悅車機助手",
       "packageName": "tw.com.shenyue.assistant",
-      "versionCode": 110,
-      "versionName": "1.0.10-live",
-      "minAndroid": "依 APK 設定",
-      "targetSdk": "36",
+      "versionCode": 135,
+      "versionName": "1.0.35-car-legacy-cloud",
+      "minAndroid": "Android SDK 23",
+      "targetSdk": "28",
       "sizeLabel": "2.5 MB",
-      "apkUrl": "https://github.com/SYLONG7708/update/releases/download/apk-cloud/tw.com.shenyue.assistant-110.apk",
-      "sha256": "ada86dc494bbd77d740645c7832b08e2621ce8e045a7f54aef673aca09aac0c0",
+      "apkUrl": "https://raw.githubusercontent.com/SYLONG7708/shen-yue-iphone-assistant/main/releases/1.0.35-replay-usb123-full-file-share/ShenYueAssistant-1.0.35-replay-usb123-full-file-share-car-legacy-cloud-release-debug-signed.apk",
+      "sha256": "d5ed1393ec4d899921637190cafd2825257e4f8b4dd6545293f5435063bef2cc",
       "imageUrl": "https://sylong7708.github.io/shen-yue-iphone-assistant/assets/update-gallery/tw.com.shenyue.assistant-110-photo-1.png",
       "iconUrl": "https://sylong7708.github.io/shen-yue-iphone-assistant/assets/update-icons/tw.com.shenyue.assistant-110-icon.png",
       "galleryImages": [
@@ -43,11 +43,13 @@
         "https://sylong7708.github.io/shen-yue-iphone-assistant/assets/update-gallery/tw.com.shenyue.assistant-110-photo-2.png"
       ],
       "category": "申悅助手",
-      "description": "申悅車機助手即時更新版，修正更新中心上傳驗證與雲端清單同步，App 名稱顯示為申悅車機助手。",
+      "description": "申悅車機助手回放頂配版：完整掃描 USB1／USB2／USB3 與環景影片，QR 下載核對完整位元數後才顯示 100%，Android 手機可原生接收完整影片並直接分享到 LINE。",
       "changelog": [
-        "已加入申悅車機更新中心",
-        "可在車機內下載安裝",
-        "修正上傳成功驗證與雲端清單同步"
+        "USB1／USB2／USB3、動態可移除磁碟與 MediaStore 全面掃描，支援最多 100,000 部影片",
+        "移除七層資料夾限制，支援 MP4／TS／MOV／AVI／MKV／WebM／DAV／H264／H265",
+        "下載可自動續傳，完整位元數與檔案大小驗證通過後才顯示 100%",
+        "同版 Android 手機掃原生 QR，可把完整影片檔案直接傳送到 LINE／Messenger／微信",
+        "通用瀏覽器 QR 保留，且不再用網址冒充影片檔案分享"
       ]
     },
     {

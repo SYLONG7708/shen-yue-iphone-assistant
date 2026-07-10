@@ -252,8 +252,49 @@
       .native-video-list {
         display: grid;
         gap: 8px;
-        max-height: 260px;
+        max-height: 520px;
         overflow: auto;
+      }
+
+      .native-video-browser,
+      .native-video-results {
+        display: grid;
+        gap: 8px;
+      }
+
+      .native-video-filters {
+        position: sticky;
+        z-index: 2;
+        top: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(150px, 0.38fr);
+        gap: 8px;
+        padding: 8px 0;
+        background: #101c22;
+      }
+
+      .native-video-filters input,
+      .native-video-filters select {
+        width: 100%;
+        min-height: 42px;
+        border: 1px solid rgba(168, 212, 93, 0.2);
+        border-radius: 8px;
+        padding: 9px 11px;
+        background: #17252d;
+        color: #f3fbf7;
+        font: inherit;
+      }
+
+      .native-video-count {
+        color: #9bb0a8;
+      }
+
+      .native-video-more {
+        width: 100%;
+      }
+
+      @media (max-width: 620px) {
+        .native-video-filters { grid-template-columns: 1fr; }
       }
 
       .native-video-item {
@@ -397,6 +438,22 @@
         image-rendering: crisp-edges;
       }
 
+      .qr-option {
+        display: grid;
+        gap: 10px;
+        width: 100%;
+        place-items: center;
+        padding: 14px;
+        border: 1px solid rgba(23, 33, 29, 0.14);
+        border-radius: 10px;
+        background: #fff;
+      }
+
+      .qr-option-primary {
+        border: 3px solid #cf263f;
+        background: #fff8f9;
+      }
+
       .result-box {
         margin-top: 12px;
         border: 1px solid rgba(168, 212, 93, 0.18);
@@ -529,7 +586,7 @@
             <input class="hidden" id="fileInput" type="file" accept="video/*,.mp4,.m4v,.mov,.mkv,.webm,.ts,.mts,.m2ts" />
             <div class="native-video-tools hidden" id="nativeVideoTools">
               <div class="native-video-row">
-                <button id="nativeScanButton" type="button">掃描環景影片</button>
+                <button id="nativeScanButton" type="button">完整掃描 USB1 / USB2 / USB3</button>
                 <button id="nativePermissionButton" type="button">允許讀取影片</button>
               </div>
               <div class="native-video-list" id="nativeVideoList"></div>
@@ -539,8 +596,8 @@
               <strong class="progress-percent" id="progressText">0%</strong>
             </div>
             <div class="actions">
-              <button class="primary" id="uploadButton" type="button" disabled>上傳並產生 QR</button>
-              <button id="shareButton" type="button" disabled>分享通訊APP</button>
+              <button class="primary" id="uploadButton" type="button" disabled>產生完整影片 QR</button>
+              <button id="shareButton" type="button" disabled>分享 QR 連結</button>
               <button id="resetButton" type="button">清除重選</button>
             </div>
           </div>

@@ -251,8 +251,8 @@
           <a id="localFallback" class="hidden" href="#" rel="noopener">本機下載頁</a>
           <a id="openDirect" class="hidden" href="#" target="_blank" rel="noopener">原始影片</a>
           <button type="button" id="externalPlayer" class="hidden">外部播放器</button>
-          <button type="button" id="share">分享通訊APP</button>
-          <button type="button" id="lineShare">LINE</button>
+          <button type="button" id="share">分享下載連結</button>
+          <button type="button" id="lineShare">下載後傳 LINE</button>
           <button type="button" id="copy">複製連結</button>
         </div>
         <div id="diagnostics" class="diagnostics hidden"></div>
@@ -609,11 +609,10 @@
       }
 
       function fallbackBrowserDownload(url) {
-        setDownloadProgress(100);
-        setState("下載完成 100%");
+        setState("無法驗證完整下載");
         currentDownloadUrl = url || currentDownloadUrl || currentVideo;
-        showSendPanel(null);
-        triggerUrlDownload(currentDownloadUrl, currentName, true);
+        setAutoDownloadMode(false);
+        showNotice("目前瀏覽器阻擋串流進度或 HTTP 車機連線，因此沒有假裝顯示 100%。請改用車機本機 QR 頁，或按『下載 MP4』交給系統瀏覽器下載。", "error");
       }
 
       function triggerUrlDownload(url, fileName, autoAttempt = false) {
@@ -666,9 +665,10 @@
         sendPanel.classList.remove("hidden");
       }
 
-      async function shareToSystem() {
-        const text = buildShareText();
-        if (downloadedFile && navigator.canShare && navigator.canShare({ files: [downloadedFile] })) {
+      async function shareToSystem(targetName = "通訊 APP") {
+        if (downloadedFile
+            && navigator.share
+            && (!navigator.canShare || navigator.canShare({ files: [downloadedFile] }))) {
           await navigator.share({
             title: currentName || "回放中心影片",
             text: currentName || "回放中心影片",
@@ -676,15 +676,7 @@
           });
           return;
         }
-        if (navigator.share) {
-          await navigator.share({
-            title: currentName || "回放中心影片",
-            text: text,
-            url: currentVideo
-          });
-          return;
-        }
-        await copyCurrentUrl("此瀏覽器沒有系統分享，已複製影片連結。");
+        throw new Error(`此瀏覽器不能把完整影片檔案交給 ${targetName}；請用系統瀏覽器開啟，或到下載資料夾選取影片後分享。`);
       }
 
       async function downloadWithProgress(url) {
@@ -715,9 +707,14 @@
             setState(`正在下載 ${Math.min(100, Math.floor((loaded * 100) / total))}%`);
           }
 
+          if (loaded !== total) {
+            throw new Error(`完整性檢查失敗：已下載 ${loaded} bytes，應為 ${total} bytes`);
+          }
+
           setDownloadProgress(100);
           setState("下載完成 100%");
           const blob = new Blob(chunks, { type: currentMime || response.headers.get("content-type") || "video/mp4" });
+          if (blob.size !== total) throw new Error("完整影片大小驗證失敗");
           triggerBlobDownload(blob, currentName);
           showSendPanel(blob);
         } catch (error) {
@@ -884,6 +881,12 @@
         diagnostics.classList.add("hidden");
         setAutoDownloadMode(false);
 
+        if (source === "local-fast" && location.protocol === "https:" && currentFallback && /^http:\/\//i.test(currentFallback)) {
+          setState("切換車機本機完整下載頁");
+          location.replace(currentFallback);
+          return;
+        }
+
         if (!video || !isHttpVideoUrl(video)) {
           subtitle.textContent = "影片連結不存在";
           setControlsVisible(false);
@@ -970,10 +973,24 @@
         await copyCurrentUrl("此瀏覽器沒有分享視窗，已複製下載連結。");
       });
 
-      lineShare.addEventListener("click", () => {
+      lineShare.addEventListener("click", async () => {
         if (!currentVideo) return;
-        const text = encodeURIComponent(`${currentName}\n${currentVideo}`);
-        location.href = `https://line.me/R/msg/text/?${text}`;
+        if (downloadedFile) {
+          try {
+            await shareToSystem("LINE");
+            showNotice("請在系統分享視窗選擇 LINE；傳送內容是完整影片檔案。", "info");
+          } catch (error) {
+            showNotice(error.message || "無法分享到 LINE。", "error");
+          }
+          return;
+        }
+        setAutoDownloadMode(true);
+        showNotice("LINE 僅傳送完整影片檔案；正在先下載並驗證，完成 100% 後請再按 LINE。", "info");
+        if (currentSource === "local-fast") {
+          startDownloadWarmup(true);
+        } else {
+          await startFinalDownload();
+        }
       });
 
       sendDownload.addEventListener("click", () => {
@@ -987,26 +1004,35 @@
       sendSystem.addEventListener("click", async () => {
         if (!currentVideo) return;
         try {
-          await shareToSystem();
-        } catch {
-          await copyCurrentUrl("分享視窗未完成，已複製影片連結。");
+          await shareToSystem("通訊 APP");
+        } catch (error) {
+          showNotice(error.message || "無法分享完整影片檔案。", "error");
         }
       });
 
-      sendLine.addEventListener("click", () => {
-        if (!currentVideo) return;
-        location.href = `https://line.me/R/msg/text/?${encodeURIComponent(buildShareText())}`;
+      sendLine.addEventListener("click", async () => {
+        try {
+          await shareToSystem("LINE");
+          showNotice("請在系統分享視窗選擇 LINE；傳送內容是完整影片檔案。", "info");
+        } catch (error) {
+          showNotice(error.message || "無法分享到 LINE。", "error");
+        }
       });
 
-      sendFacebook.addEventListener("click", () => {
-        if (!currentVideo) return;
-        openShareUrl(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(currentVideo)}`);
+      sendFacebook.addEventListener("click", async () => {
+        try {
+          await shareToSystem("Facebook 或 Messenger");
+        } catch (error) {
+          showNotice(error.message || "無法分享完整影片檔案。", "error");
+        }
       });
 
       sendWechat.addEventListener("click", async () => {
-        if (!currentVideo) return;
-        await copyCurrentUrl("已複製影片連結，請在微信貼上傳送。");
-        location.href = "weixin://";
+        try {
+          await shareToSystem("微信");
+        } catch (error) {
+          showNotice(error.message || "無法分享完整影片檔案。", "error");
+        }
       });
 
       async function copyCurrentUrl(message) {
