@@ -242,6 +242,8 @@
         let finalName = boot.fileName || "replay-video.mp4";
         let finalMime = boot.mimeType || "video/mp4";
         let finalSize = Number(boot.size || 0);
+        const maxResumeAttempts = Math.max(1, Math.min(12, Number(boot.maxResumeAttempts || 6)));
+        const stallTimeoutMs = Math.max(10000, Math.min(180000, Number(boot.stallTimeoutMs || 45000)));
 
         fileName.textContent = finalName;
         original.href = boot.originalUrl || "#";
@@ -329,13 +331,13 @@
           let total = finalSize > 0 ? finalSize : 0;
           let retries = 0;
 
-          while (retries < 4) {
+          while (retries < maxResumeAttempts) {
             if (run !== activeRun) throw new Error("下載已取消");
             const controller = new AbortController();
             let stallTimer = 0;
             const resetStallTimer = () => {
               window.clearTimeout(stallTimer);
-              stallTimer = window.setTimeout(() => controller.abort(), 45000);
+              stallTimer = window.setTimeout(() => controller.abort(), stallTimeoutMs);
             };
             resetStallTimer();
 
@@ -378,8 +380,8 @@
             } catch (error) {
               window.clearTimeout(stallTimer);
               retries += 1;
-              if (retries >= 4) throw error;
-              stage.textContent = `連線不穩，正在自動續傳（${retries}/3）`;
+              if (retries >= maxResumeAttempts) throw error;
+              stage.textContent = `連線不穩，正在自動續傳（${retries}/${maxResumeAttempts - 1}）`;
               await delay(900 * retries);
             }
           }

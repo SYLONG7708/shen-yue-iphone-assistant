@@ -1,0 +1,121 @@
+{
+  "schema": 1,
+  "minimumBridgeVersion": 2,
+  "revision": "2026-07-10-evergreen-1.0.36",
+  "updatedAt": "2026-07-10T21:44:52+08:00",
+  "scan": {
+    "rawFiles": true,
+    "mediaStore": true,
+    "fullScanRemovableVolumes": true,
+    "limit": 100000,
+    "maxDepth": 0,
+    "mediaRoots": [
+      "/sdcard",
+      "/storage/emulated/0",
+      "/data/media/0",
+      "/mnt/sdcard"
+    ],
+    "fullRoots": [
+      "/storage/sdcard1",
+      "/storage/sdcard2",
+      "/storage/sdcard3",
+      "/storage/usb_storage",
+      "/mnt/media_rw/usb_storage",
+      "/mnt/usb_storage",
+      "/mnt/usbhost",
+      "/storage/usbotg",
+      "/storage/udisk",
+      "/storage/udisk1",
+      "/storage/udisk2",
+      "/mnt/udisk",
+      "/mnt/udisk1",
+      "/mnt/udisk2",
+      "/aw3603D",
+      "/360res/aw3603D",
+      "/sdcard/aw3603D",
+      "/sdcard/360res/aw3603D",
+      "/storage/emulated/0/aw3603D",
+      "/storage/emulated/0/360res/aw3603D",
+      "/data/media/0/aw3603D",
+      "/data/media/0/360res/aw3603D"
+    ],
+    "mountParents": [
+      "/storage",
+      "/sdcard",
+      "/data/media/0",
+      "/mnt/media_rw",
+      "/storage/usb_storage",
+      "/mnt/usb_storage",
+      "/mnt",
+      "/mnt/media_rw/usb_storage",
+      "/mnt/usbhost"
+    ],
+    "volumeNames": [
+      "USB1", "USB2", "USB3", "usb1", "usb2", "usb3", "Usb1", "Usb2", "Usb3",
+      "USB_DISK0", "USB_DISK1", "USB_DISK2", "usb_storage",
+      "sdcard1", "sdcard2", "sdcard3", "udisk", "udisk1", "udisk2", "usbotg",
+      "Storage01", "Storage02", "Storage03"
+    ],
+    "folderPaths": [
+      "DCIM/CAMERA", "DCIM/Camera", "DCIM/camera", "DCIM", "Movies", "Video", "Videos",
+      "Download", "aw3603D", "360res/aw3603D", "360", "360Video", "DVR", "Record",
+      "Recorder", "CarRecorder", "CarDVR", "DashCam", "dashcam"
+    ],
+    "extensions": [
+      ".mp4", ".m4v", ".mov", ".ts", ".mts", ".m2ts", ".avi", ".mkv", ".webm",
+      ".3gp", ".3g2", ".3gpp", ".3gpp2", ".dav", ".264", ".h264", ".hevc", ".h265",
+      ".insv", ".lrv", ".vob", ".mpg", ".mpeg", ".asf", ".wmv", ".flv", ".f4v", ".ogv"
+    ],
+    "ignoredDirectoryNames": [
+      "System Volume Information",
+      "$RECYCLE.BIN"
+    ],
+    "removablePathHints": [
+      "/media_rw/", "/usb", "/udisk", "/usbotg", "/sdcard1", "/sdcard2", "/sdcard3", "/storage0"
+    ],
+    "sourceRules": [
+      { "contains": "/usb3/", "label": "USB3" },
+      { "contains": "/usb_disk2/", "label": "USB3" },
+      { "contains": "/sdcard3/", "label": "USB3/sdcard3" },
+      { "contains": "/udisk2/", "label": "USB3/udisk2" },
+      { "contains": "/storage03/", "label": "USB3/Storage03" },
+      { "contains": "/usb2/", "label": "USB2" },
+      { "contains": "/usb_disk1/", "label": "USB2" },
+      { "contains": "/sdcard2/", "label": "USB2/sdcard2" },
+      { "contains": "/usb1/", "label": "USB1" },
+      { "contains": "/usb_disk0/", "label": "USB1" },
+      { "contains": "/sdcard1/", "label": "USB1/sdcard1" },
+      { "contains": "/usb_storage/", "label": "usb_storage" },
+      { "contains": "/udisk1/", "label": "udisk1" },
+      { "contains": "/udisk/", "label": "udisk" },
+      { "contains": "/usbotg/", "label": "usbotg" },
+      { "contains": "/storage01/", "label": "Storage01" },
+      { "contains": "/storage02/", "label": "Storage02" },
+      { "contains": "/storage/emulated/0/", "label": "內部儲存" },
+      { "contains": "/data/media/0/", "label": "內部儲存" },
+      { "contains": "/sdcard/", "label": "內部儲存" }
+    ]
+  },
+  "download": {
+    "shareTtlMinutes": 360,
+    "maxResumeAttempts": 6,
+    "connectTimeoutMs": 15000,
+    "readTimeoutMs": 90000,
+    "stallTimeoutMs": 45000,
+    "remuxExtensions": [
+      ".mov", ".ts", ".mts", ".m2ts", ".avi", ".mkv", ".webm", ".3gp", ".3g2",
+      ".3gpp", ".3gpp2", ".dav", ".264", ".h264", ".hevc", ".h265", ".insv",
+      ".lrv", ".vob", ".mpg", ".mpeg", ".asf", ".wmv", ".flv", ".f4v", ".ogv"
+    ]
+  },
+  "sharing": {
+    "autoOpenPackage": "jp.naver.line.android",
+    "targets": [
+      { "label": "LINE", "package": "jp.naver.line.android", "primary": true },
+      { "label": "Messenger", "package": "com.facebook.orca", "primary": false },
+      { "label": "Facebook", "package": "com.facebook.katana", "primary": false },
+      { "label": "微信", "package": "com.tencent.mm", "primary": false },
+      { "label": "系統分享", "package": "", "primary": false }
+    ]
+  }
+}

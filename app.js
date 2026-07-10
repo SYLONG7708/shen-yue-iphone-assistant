@@ -2394,7 +2394,10 @@ function renderUpdateDeviceState() {
   }
 
   const permission = state.canRequestPackageInstalls ? "已允許安裝 APK" : "尚未允許安裝未知來源";
-  updateDevice.textContent = `本機助手：${state.packageName}｜目前版本 ${state.versionName} (${state.versionCode})｜${permission}${state.lastInstallStatus ? `｜${state.lastInstallStatus}` : ""}`;
+  const evergreen = state.nativeBridgeVersion
+    ? `｜常青原生核心 v${state.nativeBridgeVersion}｜設定 ${state.evergreenRevision || "內建"}`
+    : "";
+  updateDevice.textContent = `本機助手：${state.packageName}｜目前版本 ${state.versionName} (${state.versionCode})｜${permission}${evergreen}${state.lastInstallStatus ? `｜${state.lastInstallStatus}` : ""}`;
 }
 
 function loadBundledManifest(remoteError) {
@@ -3027,6 +3030,11 @@ if ("serviceWorker" in navigator) {
 }
 
 window.addEventListener("pageshow", () => checkRemoteContentNow());
+window.addEventListener("shenYueNativeReady", () => {
+  renderUpdateDeviceState();
+  if (updateCenterLoaded) loadUpdateManifest(true);
+});
+window.addEventListener("shenYueEvergreenReady", () => renderUpdateDeviceState());
 if (!isAndroidApk) {
   window.addEventListener("focus", () => checkRemoteContentNow());
   document.addEventListener("visibilitychange", () => {

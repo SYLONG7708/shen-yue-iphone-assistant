@@ -2,6 +2,7 @@ package tw.com.shenyue.assistant;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -16,6 +17,7 @@ import android.os.Looper;
 import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -23,6 +25,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -33,6 +36,9 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.URL;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -40,7 +46,7 @@ import java.util.concurrent.Executors;
 public class ReplayReceiverActivity extends Activity {
     private static final int STORAGE_PERMISSION_REQUEST = 7812;
     private static final int BUFFER_SIZE = 256 * 1024;
-    private static final int MAX_DOWNLOAD_ATTEMPTS = 4;
+    private static final int DEFAULT_DOWNLOAD_ATTEMPTS = 6;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -59,6 +65,12 @@ public class ReplayReceiverActivity extends Activity {
     private String fileName = "replay-video.mp4";
     private String mimeType = "video/mp4";
     private long expectedSize = 0L;
+    private int maxDownloadAttempts = DEFAULT_DOWNLOAD_ATTEMPTS;
+    private int connectTimeoutMs = 15000;
+    private int readTimeoutMs = 90000;
+    private String autoSharePackage = "jp.naver.line.android";
+    private String configRevision = EvergreenConfig.DEFAULT_REVISION;
+    private final List<ShareTarget> shareTargets = new ArrayList<>();
     private volatile int downloadGeneration = 0;
 
     @Override
@@ -133,12 +145,8 @@ public class ReplayReceiverActivity extends Activity {
                 LinearLayout.LayoutParams.WRAP_CONTENT
         ));
 
-        actions.addView(actionButton("分享到 LINE（完整影片）", true, view -> shareToPackage("jp.naver.line.android", "LINE")));
-        actions.addView(actionButton("分享到 Facebook／Messenger", false, view -> shareFacebookOrMessenger()));
-        actions.addView(actionButton("分享到微信", false, view -> shareToPackage("com.tencent.mm", "微信")));
-        actions.addView(actionButton("系統分享完整影片", false, view -> shareToPackage("", "通訊 APP")));
-        saveButton = actionButton("再次儲存到下載資料夾", false, view -> saveToDownloadsAsync());
-        actions.addView(saveButton);
+        useDefaultShareTargets();
+        renderShareActions();
 
         retryButton = actionButton("重新下載完整影片", true, view -> startDownload());
         retryButton.setVisibility(View.GONE);
@@ -195,6 +203,17 @@ public class ReplayReceiverActivity extends Activity {
         } catch (Exception ignored) {
             expectedSize = 0L;
         }
+        maxDownloadAttempts = boundedQueryInt(data, "attempts", DEFAULT_DOWNLOAD_ATTEMPTS, 1, 12);
+        connectTimeoutMs = boundedQueryInt(data, "connect", 15000, 3000, 60000);
+        readTimeoutMs = boundedQueryInt(data, "read", 90000, 15000, 600000);
+        autoSharePackage = "jp.naver.line.android";
+        if (data.getQueryParameter("autoPackage") != null) {
+            autoSharePackage = safePackageName(safeQuery(data, "autoPackage"));
+        }
+        configRevision = safeQuery(data, "configRevision");
+        useDefaultShareTargets();
+        applyShareTargets(safeQuery(data, "targets"));
+        renderShareActions();
         titleView.setText(fileName);
 
         if (!isAllowedReplayUrl(downloadUrl) || (statusUrl.length() > 0 && !isAllowedReplayUrl(statusUrl))) {
@@ -202,6 +221,49 @@ public class ReplayReceiverActivity extends Activity {
             return;
         }
         startDownload();
+    }
+
+    private void useDefaultShareTargets() {
+        shareTargets.clear();
+        shareTargets.add(new ShareTarget("LINE", "jp.naver.line.android", true));
+        shareTargets.add(new ShareTarget("Messenger", "com.facebook.orca", false));
+        shareTargets.add(new ShareTarget("Facebook", "com.facebook.katana", false));
+        shareTargets.add(new ShareTarget("微信", "com.tencent.mm", false));
+        shareTargets.add(new ShareTarget("系統分享", "", false));
+    }
+
+    private void applyShareTargets(String json) {
+        if (json == null || json.length() == 0) return;
+        try {
+            JSONArray array = new JSONArray(json);
+            List<ShareTarget> parsed = new ArrayList<>();
+            for (int index = 0; index < array.length() && parsed.size() < 12; index += 1) {
+                JSONObject item = array.optJSONObject(index);
+                if (item == null) continue;
+                String label = item.optString("label", "").trim();
+                if (label.length() == 0 || label.length() > 40) continue;
+                String packageName = safePackageName(item.optString("package", ""));
+                parsed.add(new ShareTarget(label, packageName, item.optBoolean("primary", false)));
+            }
+            if (!parsed.isEmpty()) {
+                shareTargets.clear();
+                shareTargets.addAll(parsed);
+            }
+        } catch (Exception ignored) {
+            // Keep last-known-safe built-in targets.
+        }
+    }
+
+    private void renderShareActions() {
+        actions.removeAllViews();
+        for (ShareTarget target : shareTargets) {
+            String label = target.packageName.length() == 0
+                    ? target.label + "完整影片"
+                    : "分享到 " + target.label + "（完整影片）";
+            actions.addView(actionButton(label, target.primary, view -> shareToPackage(target.packageName, target.label)));
+        }
+        saveButton = actionButton("再次儲存到下載資料夾", false, view -> saveToDownloadsAsync());
+        actions.addView(saveButton);
     }
 
     private String safeQuery(Uri uri, String name) {
@@ -226,11 +288,13 @@ public class ReplayReceiverActivity extends Activity {
 
     private void startDownload() {
         final int generation = ++downloadGeneration;
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         actions.setVisibility(View.GONE);
         retryButton.setVisibility(View.GONE);
         downloadedFile = null;
         savedDownloadUri = null;
-        updateProgress(0, "正在準備完整影片", "手機與車機需保持在同一個 Wi-Fi 或熱點。");
+        String revisionNote = configRevision.length() == 0 ? "" : "｜常青設定 " + configRevision;
+        updateProgress(0, "正在準備完整影片", "手機與車機需保持在同一個 Wi-Fi 或熱點" + revisionNote + "。");
         executor.execute(() -> {
             try {
                 waitForPhoneVideoReady(generation);
@@ -250,7 +314,9 @@ public class ReplayReceiverActivity extends Activity {
                 mainHandler.post(() -> {
                     updateProgress(100, "下載完成 100%｜完整性驗證通過", formatBytes(file.length()) + "｜" + finalSaveNote);
                     actions.setVisibility(View.VISIBLE);
-                    mainHandler.postDelayed(() -> shareToPackage("jp.naver.line.android", "LINE"), 450L);
+                    getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    final String autoLabel = labelForPackage(autoSharePackage);
+                    mainHandler.postDelayed(() -> shareToPackage(autoSharePackage, autoLabel), 650L);
                 });
             } catch (Exception error) {
                 if (generation == downloadGeneration) mainHandler.post(() -> showFailure(safeMessage(error)));
@@ -293,14 +359,17 @@ public class ReplayReceiverActivity extends Activity {
         File directory = new File(getCacheDir(), ReplayFileProvider.DIRECTORY_NAME);
         if (!directory.exists() && !directory.mkdirs()) throw new IllegalStateException("無法建立手機影片暫存資料夾");
         cleanupOldFiles(directory);
-        File part = new File(directory, fileName + ".part");
-        File target = new File(directory, fileName);
-        if (part.exists()) part.delete();
+        String transferKey = digestText(downloadUrl).substring(0, 20);
+        String transferName = transferKey + "--" + fileName;
+        File part = new File(directory, transferName + ".part");
+        File target = new File(directory, transferName);
+        if (target.exists() && expectedSize > 0L && target.length() == expectedSize) return target;
         if (target.exists()) target.delete();
+        if (part.exists() && expectedSize > 0L && part.length() > expectedSize) part.delete();
 
         long total = expectedSize;
         int attempts = 0;
-        while (attempts < MAX_DOWNLOAD_ATTEMPTS) {
+        while (attempts < maxDownloadAttempts) {
             if (generation != downloadGeneration) throw new IllegalStateException("下載已取消");
             long existing = part.exists() ? part.length() : 0L;
             HttpURLConnection connection = openConnection(downloadUrl);
@@ -347,7 +416,7 @@ public class ReplayReceiverActivity extends Activity {
             } catch (Exception error) {
                 attempts += 1;
                 connection.disconnect();
-                if (attempts >= MAX_DOWNLOAD_ATTEMPTS) throw error;
+                if (attempts >= maxDownloadAttempts) throw error;
                 Thread.sleep(700L * attempts);
                 continue;
             } finally {
@@ -372,8 +441,8 @@ public class ReplayReceiverActivity extends Activity {
     private HttpURLConnection openConnection(String value) throws Exception {
         if (!isAllowedReplayUrl(value)) throw new IllegalStateException("不允許的影片網址");
         HttpURLConnection connection = (HttpURLConnection) new URL(value).openConnection();
-        connection.setConnectTimeout(15000);
-        connection.setReadTimeout(60000);
+        connection.setConnectTimeout(connectTimeoutMs);
+        connection.setReadTimeout(readTimeoutMs);
         connection.setUseCaches(false);
         connection.setInstanceFollowRedirects(false);
         connection.setRequestProperty("Accept-Encoding", "identity");
@@ -427,7 +496,7 @@ public class ReplayReceiverActivity extends Activity {
     private Uri saveToDownloads(File source) throws Exception {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ContentValues values = new ContentValues();
-            values.put(MediaStore.Downloads.DISPLAY_NAME, source.getName());
+            values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
             values.put(MediaStore.Downloads.MIME_TYPE, mimeType);
             values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/ShenYueReplay");
             values.put(MediaStore.Downloads.IS_PENDING, 1);
@@ -452,7 +521,7 @@ public class ReplayReceiverActivity extends Activity {
         }
         File downloads = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ShenYueReplay");
         if (!downloads.exists() && !downloads.mkdirs()) return null;
-        File destination = new File(downloads, source.getName());
+        File destination = new File(downloads, fileName);
         copyFile(source, destination);
         return Uri.fromFile(destination);
     }
@@ -473,14 +542,6 @@ public class ReplayReceiverActivity extends Activity {
         });
     }
 
-    private void shareFacebookOrMessenger() {
-        if (isPackageInstalled("com.facebook.orca")) {
-            shareToPackage("com.facebook.orca", "Messenger");
-        } else {
-            shareToPackage("com.facebook.katana", "Facebook");
-        }
-    }
-
     private void shareToPackage(String packageName, String label) {
         File file = downloadedFile;
         if (file == null || !file.isFile() || file.length() <= 0L) {
@@ -494,6 +555,7 @@ public class ReplayReceiverActivity extends Activity {
                         .scheme("content")
                         .authority(getPackageName() + ".replayfiles")
                         .appendPath(file.getName())
+                        .appendQueryParameter("name", fileName)
                         .build();
             }
             Intent send = new Intent(Intent.ACTION_SEND);
@@ -502,26 +564,22 @@ public class ReplayReceiverActivity extends Activity {
                     : mimeType;
             send.setType(shareType);
             send.putExtra(Intent.EXTRA_STREAM, uri);
-            send.putExtra(Intent.EXTRA_TEXT, file.getName());
-            send.setClipData(ClipData.newRawUri(file.getName(), uri));
+            send.putExtra(Intent.EXTRA_TEXT, fileName);
+            send.setClipData(ClipData.newRawUri(fileName, uri));
             send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            if (packageName != null && packageName.length() > 0 && isPackageInstalled(packageName)) {
-                send.setPackage(packageName);
-                startActivity(send);
-            } else {
-                startActivity(Intent.createChooser(send, "分享完整影片到 " + label));
+            if (packageName != null && packageName.length() > 0) {
+                try {
+                    Intent direct = new Intent(send);
+                    direct.setPackage(packageName);
+                    startActivity(direct);
+                    return;
+                } catch (ActivityNotFoundException ignored) {
+                    // A remotely configured package can be absent; the system chooser remains the safe fallback.
+                }
             }
+            startActivity(Intent.createChooser(send, "分享完整影片到 " + label));
         } catch (Exception error) {
             Toast.makeText(this, "無法開啟 " + label + "：" + safeMessage(error), Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private boolean isPackageInstalled(String packageName) {
-        try {
-            getPackageManager().getPackageInfo(packageName, 0);
-            return true;
-        } catch (Exception ignored) {
-            return false;
         }
     }
 
@@ -536,6 +594,7 @@ public class ReplayReceiverActivity extends Activity {
     }
 
     private void showFailure(String message) {
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         actions.setVisibility(View.GONE);
         retryButton.setVisibility(downloadUrl.length() > 0 ? View.VISIBLE : View.GONE);
         stateView.setText("尚未完成下載");
@@ -547,6 +606,35 @@ public class ReplayReceiverActivity extends Activity {
         String name = value == null ? "" : value.trim().replaceAll("[\\\\/:*?\"<>|\\r\\n]+", "_");
         if (name.length() > 160) name = name.substring(name.length() - 160);
         return name;
+    }
+
+    private int boundedQueryInt(Uri uri, String name, int fallback, int minimum, int maximum) {
+        try {
+            int value = Integer.parseInt(safeQuery(uri, name));
+            return Math.max(minimum, Math.min(maximum, value));
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private String safePackageName(String value) {
+        String name = value == null ? "" : value.trim();
+        return name.matches("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)+") ? name : "";
+    }
+
+    private String labelForPackage(String packageName) {
+        for (ShareTarget target : shareTargets) {
+            if (target.packageName.equals(packageName)) return target.label;
+        }
+        return packageName == null || packageName.length() == 0 ? "通訊 APP" : "指定 APP";
+    }
+
+    private String digestText(String value) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] bytes = digest.digest((value == null ? "" : value).getBytes("UTF-8"));
+        StringBuilder output = new StringBuilder();
+        for (byte item : bytes) output.append(String.format(Locale.US, "%02x", item));
+        return output.toString();
     }
 
     private String safeMessage(Throwable error) {
@@ -570,7 +658,20 @@ public class ReplayReceiverActivity extends Activity {
     @Override
     protected void onDestroy() {
         downloadGeneration += 1;
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         executor.shutdownNow();
         super.onDestroy();
+    }
+
+    private static class ShareTarget {
+        final String label;
+        final String packageName;
+        final boolean primary;
+
+        ShareTarget(String label, String packageName, boolean primary) {
+            this.label = label;
+            this.packageName = packageName;
+            this.primary = primary;
+        }
     }
 }

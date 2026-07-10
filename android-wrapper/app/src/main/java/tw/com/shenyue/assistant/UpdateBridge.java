@@ -29,6 +29,8 @@ import android.os.storage.StorageVolume;
 import android.provider.OpenableColumns;
 import android.provider.MediaStore;
 import android.provider.Settings;
+import android.system.Os;
+import android.system.StructStat;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.widget.Toast;
@@ -82,16 +84,11 @@ public class UpdateBridge {
     static final String PREFS_NAME = "shen_yue_update_center";
     static final String LAST_INSTALL_STATUS = "last_install_status";
     static final String ACTION_INSTALL_COMMIT = "tw.com.shenyue.assistant.INSTALL_COMMIT";
+    private static final String EVERGREEN_CONFIG_PREF = "evergreen_native_config";
     private static final int VIDEO_PERMISSION_REQUEST_CODE = 7710;
     private static final int LOCAL_VIDEO_SCAN_LIMIT = 100000;
     private static final int FAST_UPLOAD_BUFFER_SIZE = 256 * 1024;
     private static final long UPLOAD_PROGRESS_INTERVAL_MS = 180L;
-    private static final long LOCAL_SHARE_TTL_MS = 6L * 60L * 60L * 1000L;
-    private static final String[] VIDEO_EXTENSIONS = {
-            ".mp4", ".m4v", ".mov", ".ts", ".mts", ".m2ts",
-            ".avi", ".mkv", ".webm", ".3gp", ".3g2",
-            ".dav", ".264", ".h264", ".hevc", ".h265"
-    };
     private static final String CLOUD_HOME_URL = "https://sylong7708.github.io/shen-yue-iphone-assistant/";
 
     private final Activity activity;
@@ -107,10 +104,33 @@ public class UpdateBridge {
     private volatile ServerSocket localVideoServer;
     private volatile Thread localVideoServerThread;
     private volatile Uri lastSelectedFileUri;
+    private volatile EvergreenConfig evergreenConfig;
+    private volatile boolean evergreenConfigFromCache;
 
     UpdateBridge(Activity activity) {
         this.activity = activity;
         this.packageManager = activity.getPackageManager();
+        EvergreenConfig loaded = EvergreenConfig.defaults();
+        boolean cached = false;
+        String stored = getPrefs().getString(EVERGREEN_CONFIG_PREF, "");
+        if (stored.length() > 0) {
+            try {
+                loaded = EvergreenConfig.parse(stored);
+                cached = true;
+            } catch (Exception ignored) {
+                // Invalid or obsolete cached config falls back atomically to the built-in safe defaults.
+            }
+        } else {
+            try (InputStream input = activity.getAssets().open("www/replay-center/native-config.json");
+                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                copyStream(input, output);
+                loaded = EvergreenConfig.parse(output.toString("UTF-8"));
+            } catch (Exception ignored) {
+                // Cloud-only APKs intentionally rely on the compiled defaults until GitHub config arrives.
+            }
+        }
+        evergreenConfig = loaded;
+        evergreenConfigFromCache = cached;
     }
 
     void setLastSelectedFileUri(Uri uri) {
@@ -168,8 +188,56 @@ public class UpdateBridge {
             result.put("versionCode", getVersionCode(self));
             result.put("canRequestPackageInstalls", canRequestPackageInstalls());
             result.put("lastInstallStatus", getPrefs().getString(LAST_INSTALL_STATUS, ""));
+            result.put("nativeBridgeVersion", EvergreenConfig.BRIDGE_VERSION);
+            result.put("evergreenRevision", evergreenConfig.revision);
         } catch (Exception error) {
             putError(result, error);
+        }
+        return result.toString();
+    }
+
+    @JavascriptInterface
+    public String getNativeCapabilities() {
+        JSONObject result = new JSONObject();
+        try {
+            PackageInfo self = packageManager.getPackageInfo(activity.getPackageName(), 0);
+            result = evergreenConfig.toSummary(evergreenConfigFromCache);
+            result.put("packageName", activity.getPackageName());
+            result.put("versionName", self.versionName == null ? "" : self.versionName);
+            result.put("versionCode", getVersionCode(self));
+            result.put("secureSessionBridge", true);
+            result.put("remoteConfigurableScan", true);
+            result.put("remoteConfigurableDownloads", true);
+            result.put("remoteConfigurableShareTargets", true);
+            result.put("offlineLastKnownGoodConfig", true);
+            result.put("nativeConfigUrl", CLOUD_HOME_URL + "replay-center/native-config.json");
+        } catch (Exception error) {
+            putError(result, error);
+        }
+        return result.toString();
+    }
+
+    @JavascriptInterface
+    public String configureEvergreen(String configJson) {
+        JSONObject result = new JSONObject();
+        try {
+            EvergreenConfig next = EvergreenConfig.parse(configJson);
+            String normalized = next.toJson().toString();
+            if (!getPrefs().edit().putString(EVERGREEN_CONFIG_PREF, normalized).commit()) {
+                throw new IllegalStateException("無法保存常青原生設定");
+            }
+            evergreenConfig = next;
+            evergreenConfigFromCache = false;
+            result = next.toSummary(false);
+            result.put("message", "GitHub 常青原生設定已套用。");
+        } catch (Exception error) {
+            putError(result, error);
+            try {
+                result.put("activeRevision", evergreenConfig.revision);
+                result.put("keptLastKnownGood", true);
+            } catch (JSONException ignored) {
+                // Reporting only.
+            }
         }
         return result.toString();
     }
@@ -355,12 +423,14 @@ public class UpdateBridge {
 
     @JavascriptInterface
     public String listLocalVideos() {
-        return buildLocalVideosResult().toString();
+        return buildLocalVideosResult(null, evergreenConfig).toString();
     }
 
     @JavascriptInterface
     public String listLocalVideosAsync() {
         LocalVideoScanTask task = new LocalVideoScanTask("scan-" + System.currentTimeMillis());
+        task.scanLimit = evergreenConfig.scanLimit;
+        task.configRevision = evergreenConfig.revision;
         videoScanTasks.put(task.id, task);
         localVideoExecutor.execute(() -> runLocalVideoScan(task));
         return task.toJson().toString();
@@ -380,7 +450,7 @@ public class UpdateBridge {
         task.progress = 5;
         task.message = "正在尋找 USB1 / USB2 / USB3 與環景影片...";
         try {
-            JSONObject result = buildLocalVideosResult(task);
+            JSONObject result = buildLocalVideosResult(task, evergreenConfig);
             task.complete(result);
         } catch (Exception error) {
             task.fail(error.getMessage() == null ? error.toString() : error.getMessage());
@@ -388,10 +458,10 @@ public class UpdateBridge {
     }
 
     private JSONObject buildLocalVideosResult() {
-        return buildLocalVideosResult(null);
+        return buildLocalVideosResult(null, evergreenConfig);
     }
 
-    private JSONObject buildLocalVideosResult(LocalVideoScanTask progressTask) {
+    private JSONObject buildLocalVideosResult(LocalVideoScanTask progressTask, EvergreenConfig config) {
         JSONObject result = new JSONObject();
         JSONArray items = new JSONArray();
         JSONArray scanRoots = new JSONArray();
@@ -408,24 +478,29 @@ public class UpdateBridge {
                 return result;
             }
 
-            if (canScanRawExternalFiles()) {
-                scanUsbCameraVideoFiles(items, seen, scanRoots, scanState, progressTask);
+            if (config.scanRawFiles && canScanRawExternalFiles()) {
+                scanUsbCameraVideoFiles(items, seen, scanRoots, scanState, progressTask, config);
             }
-            queryVideoStore(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, items, seen, scanState);
-            queryVideoStore(MediaStore.Video.Media.INTERNAL_CONTENT_URI, items, seen, scanState);
+            if (config.scanMediaStore) {
+                queryVideoStore(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, items, seen, scanState, config);
+                queryVideoStore(MediaStore.Video.Media.INTERNAL_CONTENT_URI, items, seen, scanState, config);
+            }
 
             JSONArray sortedItems = sortVideoItems(items);
 
             result.put("ok", true);
             result.put("items", sortedItems);
             result.put("count", sortedItems.length());
-            result.put("scanLimit", LOCAL_VIDEO_SCAN_LIMIT);
+            result.put("scanLimit", config.scanLimit);
             result.put("scanTruncated", scanState.truncated);
             result.put("scannedDirectories", scanState.directories);
             result.put("scannedFiles", scanState.files);
             result.put("unreadableDirectories", scanState.unreadableDirectories);
             result.put("scanRoots", scanRoots);
-            result.put("scanPaths", "USB1/USB2/USB3 + 動態可移除磁碟 + MediaStore；全資料夾 MP4/TS/MOV/AVI/MKV/WebM/DAV/H264/H265");
+            result.put("scanPaths", "GitHub 常青設定 " + config.revision + "；USB1/USB2/USB3 + 動態可移除磁碟 + MediaStore；"
+                    + config.extensions.size() + " 種影片格式");
+            result.put("configRevision", config.revision);
+            result.put("nativeBridgeVersion", EvergreenConfig.BRIDGE_VERSION);
         } catch (Exception error) {
             putError(result, error);
             try {
@@ -551,6 +626,7 @@ public class UpdateBridge {
         JSONObject result = new JSONObject();
         VideoInput video = null;
         try {
+            EvergreenConfig config = evergreenConfig;
             String safeSource = source == null ? "" : source.trim();
             if (safeSource.length() == 0) {
                 result.put("ok", false);
@@ -575,13 +651,14 @@ public class UpdateBridge {
                     video.fileName,
                     video.mimeType,
                     video.size,
-                    System.currentTimeMillis() + LOCAL_SHARE_TTL_MS
+                    System.currentTimeMillis() + config.shareTtlMs,
+                    config
             );
             localVideoShares.put(token, share);
             beginPhoneSavePreparation(share);
             String encodedName = URLEncoder.encode(share.fileName, "UTF-8").replace("+", "%20");
-            String downloadName = phoneSaveFileName(share.fileName, share.mimeType);
-            String downloadMimeType = needsPhoneSaveRemux(share.fileName, share.mimeType) ? "video/mp4" : share.mimeType;
+            String downloadName = phoneSaveFileName(share.fileName, share.mimeType, config);
+            String downloadMimeType = needsPhoneSaveRemux(share.fileName, share.mimeType, config) ? "video/mp4" : share.mimeType;
             String encodedDownloadName = URLEncoder.encode(downloadName, "UTF-8").replace("+", "%20");
             String baseUrl = "http://" + host + ":" + port;
             String localWatchUrl = baseUrl + "/local-watch/" + token;
@@ -590,7 +667,7 @@ public class UpdateBridge {
             String downloadUrl = baseUrl + "/local-download/" + token + "/" + encodedDownloadName;
             String statusUrl = baseUrl + "/local-status/" + token;
             String cloudWatchUrl = buildCloudWatchUrl(token, downloadName, downloadMimeType, share.size, downloadUrl, originalUrl, localWatchUrl);
-            String receiverUrl = buildReplayReceiverUrl(downloadUrl, statusUrl, downloadName, downloadMimeType, share.size);
+            String receiverUrl = buildReplayReceiverUrl(downloadUrl, statusUrl, downloadName, downloadMimeType, share.size, config);
             share.receiverUrl = receiverUrl;
             String watchUrl = localWatchUrl;
             String qrDataUrl = "";
@@ -618,8 +695,9 @@ public class UpdateBridge {
             result.put("fileName", share.fileName);
             result.put("mimeType", share.mimeType);
             result.put("size", share.size);
-            result.put("prepareRequired", needsPhoneSaveRemux(share.fileName, share.mimeType));
-            result.put("ttlMinutes", LOCAL_SHARE_TTL_MS / 60000L);
+            result.put("prepareRequired", needsPhoneSaveRemux(share.fileName, share.mimeType, config));
+            result.put("ttlMinutes", config.shareTtlMs / 60000L);
+            result.put("configRevision", config.revision);
         } catch (Exception error) {
             putError(result, error);
         } finally {
@@ -635,8 +713,12 @@ public class UpdateBridge {
     }
 
     private String phoneSaveFileName(String fileName, String mimeType) {
+        return phoneSaveFileName(fileName, mimeType, evergreenConfig);
+    }
+
+    private String phoneSaveFileName(String fileName, String mimeType, EvergreenConfig config) {
         String name = normalizedVideoName(fileName);
-        return needsPhoneSaveRemux(name, mimeType) ? toMp4FileName(name) : name;
+        return needsPhoneSaveRemux(name, mimeType, config) ? toMp4FileName(name) : name;
     }
 
     private String normalizedVideoName(String fileName) {
@@ -674,14 +756,22 @@ public class UpdateBridge {
             String statusUrl,
             String fileName,
             String mimeType,
-            long size
+            long size,
+            EvergreenConfig config
     ) throws Exception {
         return "shenyue-replay://download"
                 + "?url=" + urlEncode(downloadUrl)
                 + "&status=" + urlEncode(statusUrl)
                 + "&name=" + urlEncode(fileName)
                 + "&mime=" + urlEncode(mimeType == null || mimeType.length() == 0 ? "video/mp4" : mimeType)
-                + "&size=" + urlEncode(String.valueOf(size));
+                + "&size=" + urlEncode(String.valueOf(size))
+                + "&attempts=" + config.downloadAttempts
+                + "&connect=" + config.connectTimeoutMs
+                + "&read=" + config.readTimeoutMs
+                + "&stall=" + config.stallTimeoutMs
+                + "&autoPackage=" + urlEncode(config.autoSharePackage)
+                + "&targets=" + urlEncode(config.shareTargetsJson())
+                + "&configRevision=" + urlEncode(config.revision);
     }
 
     private void cleanupExpiredLocalVideoShares() {
@@ -714,7 +804,7 @@ public class UpdateBridge {
         synchronized (share) {
             if (share.prepareStarted) return;
             share.prepareStarted = true;
-            if (!needsPhoneSaveRemux(share.fileName, share.mimeType)) {
+            if (!needsPhoneSaveRemux(share.fileName, share.mimeType, share.config)) {
                 useOriginalVideoForPhone(share, "影片已可直接下載。", "");
                 return;
             }
@@ -793,8 +883,15 @@ public class UpdateBridge {
     }
 
     private boolean needsPhoneSaveRemux(String fileName, String mimeType) {
+        return needsPhoneSaveRemux(fileName, mimeType, evergreenConfig);
+    }
+
+    private boolean needsPhoneSaveRemux(String fileName, String mimeType, EvergreenConfig config) {
         String name = fileName == null ? "" : fileName.toLowerCase(Locale.US);
         String type = mimeType == null ? "" : mimeType.toLowerCase(Locale.US);
+        for (String extension : config.remuxExtensions) {
+            if (name.endsWith(extension)) return true;
+        }
         return isTransportStreamName(name)
                 || isTransportStreamMime(mimeType)
                 || isQuickTimeName(name)
@@ -939,6 +1036,8 @@ public class UpdateBridge {
         result.put("rawScanEnabled", canScanRawExternalFiles());
         result.put("readPermission", getVideoReadPermission());
         result.put("nativeVideoBridge", true);
+        result.put("nativeBridgeVersion", EvergreenConfig.BRIDGE_VERSION);
+        result.put("evergreenRevision", evergreenConfig.revision);
     }
 
     private boolean hasVideoReadPermission() {
@@ -972,8 +1071,8 @@ public class UpdateBridge {
         }
     }
 
-    private void queryVideoStore(Uri storeUri, JSONArray items, Set<String> seen, ScanState scanState) {
-        if (items.length() >= LOCAL_VIDEO_SCAN_LIMIT) {
+    private void queryVideoStore(Uri storeUri, JSONArray items, Set<String> seen, ScanState scanState, EvergreenConfig config) {
+        if (items.length() >= config.scanLimit) {
             scanState.truncated = true;
             return;
         }
@@ -985,10 +1084,9 @@ public class UpdateBridge {
         columns.add(MediaStore.Video.Media.DATE_MODIFIED);
         columns.add(MediaStore.Video.Media.MIME_TYPE);
         columns.add(MediaStore.Video.Media.DURATION);
+        columns.add(MediaStore.Video.Media.DATA);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             columns.add(MediaStore.Video.Media.RELATIVE_PATH);
-        } else {
-            columns.add(MediaStore.Video.Media.DATA);
         }
 
         try (Cursor cursor = activity.getContentResolver().query(
@@ -1000,22 +1098,28 @@ public class UpdateBridge {
         )) {
             if (cursor == null) return;
             while (cursor.moveToNext()) {
-                if (items.length() >= LOCAL_VIDEO_SCAN_LIMIT) {
+                if (items.length() >= config.scanLimit) {
                     scanState.truncated = true;
                     return;
                 }
                 long id = getCursorLong(cursor, MediaStore.Video.Media._ID, 0L);
                 Uri uri = ContentUris.withAppendedId(storeUri, id);
                 String uriValue = uri.toString();
-                if (!seen.add(uriValue)) continue;
 
                 JSONObject item = new JSONObject();
                 String name = getCursorString(cursor, MediaStore.Video.Media.DISPLAY_NAME, "video-" + id + ".mp4");
+                String absolutePath = getCursorString(cursor, MediaStore.Video.Media.DATA, "");
                 String relativePath = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
                         ? getCursorString(cursor, MediaStore.Video.Media.RELATIVE_PATH, "")
-                        : getCursorString(cursor, MediaStore.Video.Media.DATA, "");
-                String pathForFilter = relativePath + " " + uriValue;
-                if (!isLikelyVideoName(name)) continue;
+                        : absolutePath;
+                String itemIdentity = uriValue;
+                if (absolutePath.length() > 0) {
+                    File mediaFile = new File(absolutePath);
+                    if (mediaFile.exists()) itemIdentity = "file:" + fileSystemIdentity(mediaFile);
+                }
+                if (!seen.add(itemIdentity)) continue;
+                String pathForFilter = absolutePath + " " + relativePath + " " + uriValue;
+                if (!isLikelyVideoName(name, config)) continue;
                 scanState.files += 1;
                 item.put("id", "media-" + Math.abs(uriValue.hashCode()));
                 item.put("uri", uriValue);
@@ -1025,7 +1129,7 @@ public class UpdateBridge {
                 item.put("duration", getCursorLong(cursor, MediaStore.Video.Media.DURATION, 0L));
                 item.put("mimeType", getCursorString(cursor, MediaStore.Video.Media.MIME_TYPE, guessVideoMime(name)));
                 item.put("path", relativePath);
-                item.put("source", describeReplayVideoSource(pathForFilter));
+                item.put("source", describeReplayVideoSource(pathForFilter, config));
                 items.put(item);
             }
         } catch (Exception ignored) {
@@ -1038,19 +1142,20 @@ public class UpdateBridge {
             Set<String> seen,
             JSONArray scanRoots,
             ScanState scanState,
-            LocalVideoScanTask progressTask
+            LocalVideoScanTask progressTask,
+            EvergreenConfig config
     ) {
         List<File> roots = new ArrayList<>();
-        addKnownUsbCameraRoots(roots, scanRoots);
-        discoverStorageManagerVolumes(roots, scanRoots);
-        discoverExternalFilesVolumes(roots, scanRoots);
-        discoverMountTableVolumes(roots, scanRoots);
-        discoverUsbCameraRoots(roots, scanRoots);
+        addKnownUsbCameraRoots(roots, scanRoots, config);
+        discoverStorageManagerVolumes(roots, scanRoots, config);
+        discoverExternalFilesVolumes(roots, scanRoots, config);
+        discoverMountTableVolumes(roots, scanRoots, config);
+        discoverUsbCameraRoots(roots, scanRoots, config);
 
         Set<String> visitedDirectories = new HashSet<>();
         int totalRoots = Math.max(1, roots.size());
         for (int index = 0; index < roots.size(); index += 1) {
-            if (items.length() >= LOCAL_VIDEO_SCAN_LIMIT) {
+            if (items.length() >= config.scanLimit) {
                 scanState.truncated = true;
                 return;
             }
@@ -1059,79 +1164,25 @@ public class UpdateBridge {
                 progressTask.count = items.length();
                 progressTask.message = "正在完整掃描 USB1 / USB2 / USB3 與環景影片，已找到 " + items.length() + " 個...";
             }
-            scanRoot(roots.get(index), items, seen, visitedDirectories, scanState, progressTask);
+            scanRoot(roots.get(index), items, seen, visitedDirectories, scanState, progressTask, config);
         }
     }
 
-    private void addKnownUsbCameraRoots(List<File> roots, JSONArray scanRoots) {
-        File[] internalVolumes = {
-                new File("/sdcard"),
-                new File("/storage/emulated/0"),
-                new File("/data/media/0"),
-                new File("/mnt/sdcard")
-        };
-        for (File volume : internalVolumes) {
-            addReplayVideoRoots(roots, volume, scanRoots);
+    private void addKnownUsbCameraRoots(List<File> roots, JSONArray scanRoots, EvergreenConfig config) {
+        for (String path : config.mediaRoots) {
+            addReplayVideoRoots(roots, new File(path), scanRoots, config);
         }
-
-        File[] removableVolumes = {
-                new File("/storage/sdcard1"),
-                new File("/storage/sdcard2"),
-                new File("/storage/sdcard3"),
-                new File("/storage/usb_storage"),
-                new File("/mnt/media_rw/usb_storage"),
-                new File("/mnt/usb_storage"),
-                new File("/mnt/usbhost"),
-                new File("/storage/usbotg"),
-                new File("/storage/udisk"),
-                new File("/storage/udisk1"),
-                new File("/storage/udisk2"),
-                new File("/mnt/udisk"),
-                new File("/mnt/udisk1"),
-                new File("/mnt/udisk2")
-        };
-        for (File volume : removableVolumes) {
-            addFullReplayVolume(roots, volume, scanRoots);
+        for (String path : config.fullRoots) {
+            addFullReplayVolume(roots, new File(path), scanRoots, config);
         }
-
-        File[] directRoots = {
-                new File("/aw3603D"),
-                new File("/360res/aw3603D"),
-                new File("/sdcard/aw3603D"),
-                new File("/sdcard/360res/aw3603D"),
-                new File("/storage/emulated/0/aw3603D"),
-                new File("/storage/emulated/0/360res/aw3603D"),
-                new File("/data/media/0/aw3603D"),
-                new File("/data/media/0/360res/aw3603D")
-        };
-        for (File root : directRoots) {
-            addRoot(roots, root, scanRoots);
-        }
-
-        String[] parents = {
-                "/storage",
-                "/sdcard",
-                "/data/media/0",
-                "/mnt/media_rw",
-                "/storage/usb_storage",
-                "/mnt/usb_storage",
-                "/mnt",
-                "/mnt/media_rw/usb_storage"
-        };
-        String[] volumes = {
-                "USB1", "USB2", "USB3", "usb1", "usb2", "usb3", "Usb1", "Usb2", "Usb3",
-                "USB_DISK0", "USB_DISK1", "USB_DISK2", "usb_storage",
-                "sdcard1", "sdcard2", "sdcard3", "udisk", "udisk1", "udisk2", "usbotg",
-                "Storage01", "Storage02", "Storage03"
-        };
-        for (String parent : parents) {
-            for (String volume : volumes) {
-                addFullReplayVolume(roots, new File(parent, volume), scanRoots);
+        for (String parent : config.mountParents) {
+            for (String volume : config.volumeNames) {
+                addFullReplayVolume(roots, new File(parent, volume), scanRoots, config);
             }
         }
     }
 
-    private void discoverStorageManagerVolumes(List<File> roots, JSONArray scanRoots) {
+    private void discoverStorageManagerVolumes(List<File> roots, JSONArray scanRoots, EvergreenConfig config) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return;
         try {
             StorageManager manager = (StorageManager) activity.getSystemService(Context.STORAGE_SERVICE);
@@ -1139,10 +1190,11 @@ public class UpdateBridge {
             for (StorageVolume volume : manager.getStorageVolumes()) {
                 File root = resolveStorageVolumeDirectory(volume);
                 if (root == null) continue;
-                if (volume.isRemovable() || looksLikeRemovableVolume(root)) {
-                    addFullReplayVolume(roots, root, scanRoots);
+                if (volume.isRemovable() || looksLikeRemovableVolume(root, config)) {
+                    if (config.fullScanRemovableVolumes) addFullReplayVolume(roots, root, scanRoots, config);
+                    else addReplayVideoRoots(roots, root, scanRoots, config);
                 } else {
-                    addReplayVideoRoots(roots, root, scanRoots);
+                    addReplayVideoRoots(roots, root, scanRoots, config);
                 }
             }
         } catch (Exception ignored) {
@@ -1172,17 +1224,18 @@ public class UpdateBridge {
         return null;
     }
 
-    private void discoverExternalFilesVolumes(List<File> roots, JSONArray scanRoots) {
+    private void discoverExternalFilesVolumes(List<File> roots, JSONArray scanRoots, EvergreenConfig config) {
         try {
             File[] appDirectories = activity.getExternalFilesDirs(null);
             if (appDirectories == null) return;
             for (File appDirectory : appDirectories) {
                 File volumeRoot = storageRootFromExternalFilesDirectory(appDirectory);
                 if (volumeRoot == null) continue;
-                if (looksLikeRemovableVolume(volumeRoot)) {
-                    addFullReplayVolume(roots, volumeRoot, scanRoots);
+                if (looksLikeRemovableVolume(volumeRoot, config)) {
+                    if (config.fullScanRemovableVolumes) addFullReplayVolume(roots, volumeRoot, scanRoots, config);
+                    else addReplayVideoRoots(roots, volumeRoot, scanRoots, config);
                 } else {
-                    addReplayVideoRoots(roots, volumeRoot, scanRoots);
+                    addReplayVideoRoots(roots, volumeRoot, scanRoots, config);
                 }
             }
         } catch (Exception ignored) {
@@ -1199,7 +1252,7 @@ public class UpdateBridge {
         return null;
     }
 
-    private void discoverMountTableVolumes(List<File> roots, JSONArray scanRoots) {
+    private void discoverMountTableVolumes(List<File> roots, JSONArray scanRoots, EvergreenConfig config) {
         File mounts = new File("/proc/mounts");
         if (!mounts.canRead()) return;
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(mounts), "UTF-8"))) {
@@ -1209,24 +1262,19 @@ public class UpdateBridge {
                 if (parts.length < 2) continue;
                 String mountPath = parts[1].replace("\\040", " ");
                 File root = new File(mountPath);
-                if (looksLikeRemovableVolume(root)) addFullReplayVolume(roots, root, scanRoots);
+                if (looksLikeRemovableVolume(root, config)) {
+                    if (config.fullScanRemovableVolumes) addFullReplayVolume(roots, root, scanRoots, config);
+                    else addReplayVideoRoots(roots, root, scanRoots, config);
+                }
             }
         } catch (Exception ignored) {
             // Mount-table access is optional.
         }
     }
 
-    private void discoverUsbCameraRoots(List<File> roots, JSONArray scanRoots) {
-        File[] parents = {
-                new File("/storage"),
-                new File("/mnt/media_rw"),
-                new File("/storage/usb_storage"),
-                new File("/mnt/usb_storage"),
-                new File("/mnt/media_rw/usb_storage"),
-                new File("/mnt/usbhost"),
-                new File("/mnt")
-        };
-        for (File parent : parents) {
+    private void discoverUsbCameraRoots(List<File> roots, JSONArray scanRoots, EvergreenConfig config) {
+        for (String parentPath : config.mountParents) {
+            File parent = new File(parentPath);
             File[] children;
             try {
                 children = parent.listFiles();
@@ -1236,7 +1284,10 @@ public class UpdateBridge {
             if (children == null) continue;
             for (File child : children) {
                 if (!child.isDirectory() || isIgnoredStorageName(child.getName())) continue;
-                if (looksLikeRemovableVolume(child)) addFullReplayVolume(roots, child, scanRoots);
+                if (looksLikeRemovableVolume(child, config)) {
+                    if (config.fullScanRemovableVolumes) addFullReplayVolume(roots, child, scanRoots, config);
+                    else addReplayVideoRoots(roots, child, scanRoots, config);
+                }
                 File[] grandchildren;
                 try {
                     grandchildren = child.listFiles();
@@ -1247,58 +1298,43 @@ public class UpdateBridge {
                 for (File grandchild : grandchildren) {
                     if (grandchild.isDirectory()
                             && !isIgnoredStorageName(grandchild.getName())
-                            && looksLikeRemovableVolume(grandchild)) {
-                        addFullReplayVolume(roots, grandchild, scanRoots);
+                            && looksLikeRemovableVolume(grandchild, config)) {
+                        if (config.fullScanRemovableVolumes) addFullReplayVolume(roots, grandchild, scanRoots, config);
+                        else addReplayVideoRoots(roots, grandchild, scanRoots, config);
                     }
                 }
             }
         }
     }
 
-    private boolean looksLikeRemovableVolume(File root) {
+    private boolean looksLikeRemovableVolume(File root, EvergreenConfig config) {
         if (root == null) return false;
         String path = normalizePath(root.getAbsolutePath());
         String name = root.getName() == null ? "" : root.getName().toLowerCase(Locale.US);
-        return path.contains("/media_rw/")
-                || path.contains("/usb")
-                || path.contains("/udisk")
-                || path.contains("/usbotg")
-                || name.matches("usb(?:_disk)?[0-9]+")
+        for (String hint : config.removablePathHints) {
+            if (path.contains(hint)) return true;
+        }
+        return name.matches("usb(?:_disk)?[0-9]+")
                 || name.matches("sdcard[1-9][0-9]*")
                 || name.matches("storage[0-9]+")
                 || name.matches("udisk[0-9]*")
                 || name.matches("[0-9a-f]{4}-[0-9a-f]{4}");
     }
 
-    private void addFullReplayVolume(List<File> roots, File volumeRoot, JSONArray scanRoots) {
+    private void addFullReplayVolume(List<File> roots, File volumeRoot, JSONArray scanRoots, EvergreenConfig config) {
         addRoot(roots, volumeRoot, scanRoots);
-        addReplayVideoRoots(roots, volumeRoot, scanRoots);
+        addReplayVideoRoots(roots, volumeRoot, scanRoots, config);
     }
 
-    private void addReplayVideoRoots(List<File> roots, File volumeRoot, JSONArray scanRoots) {
-        addRoot(roots, new File(new File(volumeRoot, "DCIM"), "CAMERA"), scanRoots);
-        addRoot(roots, new File(new File(volumeRoot, "DCIM"), "Camera"), scanRoots);
-        addRoot(roots, new File(new File(volumeRoot, "DCIM"), "camera"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "DCIM"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "Movies"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "Video"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "Videos"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "Download"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "aw3603D"), scanRoots);
-        addRoot(roots, new File(new File(volumeRoot, "360res"), "aw3603D"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "360"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "360Video"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "DVR"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "Record"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "Recorder"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "CarRecorder"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "CarDVR"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "DashCam"), scanRoots);
-        addRoot(roots, new File(volumeRoot, "dashcam"), scanRoots);
+    private void addReplayVideoRoots(List<File> roots, File volumeRoot, JSONArray scanRoots, EvergreenConfig config) {
+        for (String relativePath : config.folderPaths) {
+            addRoot(roots, new File(volumeRoot, relativePath), scanRoots);
+        }
     }
 
     private void addRoot(List<File> roots, File root, JSONArray scanRoots) {
         if (root != null && root.exists() && root.canRead()) {
+            String identity = fileSystemIdentity(root);
             String rootPath;
             try {
                 rootPath = root.getCanonicalPath();
@@ -1306,6 +1342,7 @@ public class UpdateBridge {
                 rootPath = root.getAbsolutePath();
             }
             for (File existing : roots) {
+                if (fileSystemIdentity(existing).equals(identity)) return;
                 try {
                     if (existing.getCanonicalPath().equals(rootPath)) return;
                 } catch (Exception ignored) {
@@ -1323,13 +1360,15 @@ public class UpdateBridge {
             Set<String> seen,
             Set<String> visitedDirectories,
             ScanState scanState,
-            LocalVideoScanTask progressTask
+            LocalVideoScanTask progressTask,
+            EvergreenConfig config
     ) {
-        ArrayDeque<File> queue = new ArrayDeque<>();
-        queue.add(root);
-        while (!queue.isEmpty() && items.length() < LOCAL_VIDEO_SCAN_LIMIT) {
-            File current = queue.removeFirst();
-            String directoryKey = canonicalPath(current);
+        ArrayDeque<ScanDirectory> queue = new ArrayDeque<>();
+        queue.add(new ScanDirectory(root, 0));
+        while (!queue.isEmpty() && items.length() < config.scanLimit) {
+            ScanDirectory entry = queue.removeFirst();
+            File current = entry.directory;
+            String directoryKey = fileSystemIdentity(current);
             if (!visitedDirectories.add(directoryKey)) continue;
             scanState.directories += 1;
             File[] children;
@@ -1344,24 +1383,31 @@ public class UpdateBridge {
                 continue;
             }
             try {
-                java.util.Arrays.sort(children, Comparator
-                        .comparing((File value) -> !value.isDirectory())
-                        .thenComparing(value -> value.getName().toLowerCase(Locale.US)));
+                java.util.Arrays.sort(children, new Comparator<File>() {
+                    @Override
+                    public int compare(File left, File right) {
+                        if (left.isDirectory() != right.isDirectory()) return left.isDirectory() ? -1 : 1;
+                        return left.getName().compareToIgnoreCase(right.getName());
+                    }
+                });
             } catch (Exception ignored) {
                 // Filesystem order is still safe if a vendor implementation cannot be sorted.
             }
 
             for (File child : children) {
-                if (items.length() >= LOCAL_VIDEO_SCAN_LIMIT) {
+                if (items.length() >= config.scanLimit) {
                     scanState.truncated = true;
                     return;
                 }
                 if (child.isDirectory()) {
-                    queue.add(child);
+                    if (!config.isIgnoredDirectory(child.getName())
+                            && (config.maxDepth == 0 || entry.depth < config.maxDepth)) {
+                        queue.add(new ScanDirectory(child, entry.depth + 1));
+                    }
                 } else {
                     scanState.files += 1;
-                    if (!isLikelyVideoFile(child)) continue;
-                    String fileKey = "file:" + canonicalPath(child);
+                    if (!isLikelyVideoFile(child, config)) continue;
+                    String fileKey = "file:" + fileSystemIdentity(child);
                     if (!seen.add(fileKey)) continue;
                     String uri = Uri.fromFile(child).toString();
                     try {
@@ -1374,7 +1420,7 @@ public class UpdateBridge {
                         item.put("duration", 0);
                         item.put("mimeType", guessVideoMime(child.getName()));
                         item.put("path", child.getParent());
-                        item.put("source", describeReplayVideoSource(child.getAbsolutePath()));
+                        item.put("source", describeReplayVideoSource(child.getAbsolutePath(), config));
                         items.put(item);
                     } catch (JSONException ignored) {
                         // Skip malformed row only.
@@ -1432,24 +1478,9 @@ public class UpdateBridge {
                 || "data".equals(value);
     }
 
-    private String describeReplayVideoSource(String path) {
+    private String describeReplayVideoSource(String path, EvergreenConfig config) {
         String value = normalizePath(path);
-        String location = "車機影片";
-        if (value.contains("/usb3/") || value.contains("/usb_disk2/")) location = "USB3";
-        else if (value.contains("/usb2/") || value.contains("/usb_disk1/")) location = "USB2";
-        else if (value.contains("/usb1/") || value.contains("/usb_disk0/")) location = "USB1";
-        else if (value.contains("/sdcard3/")) location = "USB3/sdcard3";
-        else if (value.contains("/sdcard2/")) location = "USB2/sdcard2";
-        else if (value.contains("/sdcard1/")) location = "USB1/sdcard1";
-        else if (value.contains("/usb_storage/")) location = "usb_storage";
-        else if (value.contains("/udisk2/")) location = "USB3/udisk2";
-        else if (value.contains("/udisk1/")) location = "udisk1";
-        else if (value.contains("/udisk/")) location = "udisk";
-        else if (value.contains("/usbotg/")) location = "usbotg";
-        else if (value.contains("/storage03/")) location = "USB3/Storage03";
-        else if (value.contains("/storage01/")) location = "Storage01";
-        else if (value.contains("/storage02/")) location = "Storage02";
-        else if (value.contains("/storage/emulated/0/") || value.contains("/data/media/0/") || value.contains("/sdcard/")) location = "內部儲存";
+        String location = config.sourceLabelForPath(value);
 
         if (value.contains("/360res/aw3603d")) return location + "/360res/aw3603D";
         if (value.contains("/aw3603d")) return location + "/aw3603D";
@@ -1471,17 +1502,17 @@ public class UpdateBridge {
                 .toLowerCase(Locale.US);
     }
 
-    private boolean isLikelyVideoName(String fileName) {
+    private boolean isLikelyVideoName(String fileName, EvergreenConfig config) {
         String name = fileName == null ? "" : fileName.toLowerCase(Locale.US);
-        for (String extension : VIDEO_EXTENSIONS) {
+        for (String extension : config.extensions) {
             if (name.endsWith(extension)) return true;
         }
         return false;
     }
 
-    private boolean isLikelyVideoFile(File file) {
+    private boolean isLikelyVideoFile(File file, EvergreenConfig config) {
         if (file == null || !file.isFile() || file.length() <= 0L) return false;
-        return isLikelyVideoName(file.getName());
+        return isLikelyVideoName(file.getName(), config);
     }
 
     private VideoInput openVideoInput(String source, String fileName, String mimeType) throws Exception {
@@ -2190,17 +2221,20 @@ public class UpdateBridge {
     private void serveLocalWatchPage(OutputStream output, String method, LocalVideoShare share) throws Exception {
         beginPhoneSavePreparation(share);
         String originalName = normalizedVideoName(share.fileName);
-        String saveName = phoneSaveFileName(share.fileName, share.mimeType);
+        String saveName = phoneSaveFileName(share.fileName, share.mimeType, share.config);
         JSONObject boot = new JSONObject();
         boot.put("token", share.token);
         boot.put("fileName", saveName);
-        boot.put("mimeType", needsPhoneSaveRemux(share.fileName, share.mimeType) ? "video/mp4" : share.mimeType);
+        boot.put("mimeType", needsPhoneSaveRemux(share.fileName, share.mimeType, share.config) ? "video/mp4" : share.mimeType);
         boot.put("size", share.size);
         boot.put("statusUrl", "/local-status/" + share.token);
         boot.put("downloadUrl", "/local-download/" + share.token + "/" + urlEncode(saveName));
         boot.put("originalUrl", "/local-video/" + share.token + "/" + urlEncode(originalName));
         boot.put("receiverUrl", share.receiverUrl);
         boot.put("expiresAt", share.expiresAt);
+        boot.put("maxResumeAttempts", share.config.downloadAttempts);
+        boot.put("stallTimeoutMs", share.config.stallTimeoutMs);
+        boot.put("configRevision", share.config.revision);
 
         String template = loadLocalWatchTemplate();
         String html = template.replace("__SHENYUE_BOOTSTRAP_JSON__", safeJsonForInlineScript(boot.toString()));
@@ -2456,9 +2490,14 @@ public class UpdateBridge {
         if (value.endsWith(".webm")) return "video/webm";
         if (value.endsWith(".mkv")) return "video/x-matroska";
         if (value.endsWith(".avi")) return "video/x-msvideo";
+        if (value.endsWith(".mpg") || value.endsWith(".mpeg") || value.endsWith(".vob")) return "video/mpeg";
+        if (value.endsWith(".wmv") || value.endsWith(".asf")) return "video/x-ms-wmv";
+        if (value.endsWith(".flv") || value.endsWith(".f4v")) return "video/x-flv";
+        if (value.endsWith(".ogv")) return "video/ogg";
+        if (value.endsWith(".insv") || value.endsWith(".lrv")) return "application/octet-stream";
         if (value.endsWith(".ts") || value.endsWith(".mts") || value.endsWith(".m2ts")) return "video/mp2t";
-        if (value.endsWith(".3gp")) return "video/3gpp";
-        if (value.endsWith(".3g2")) return "video/3gpp2";
+        if (value.endsWith(".3gp") || value.endsWith(".3gpp")) return "video/3gpp";
+        if (value.endsWith(".3g2") || value.endsWith(".3gpp2")) return "video/3gpp2";
         if (value.endsWith(".dav") || value.endsWith(".264") || value.endsWith(".h264")
                 || value.endsWith(".hevc") || value.endsWith(".h265")) return "application/octet-stream";
         return "video/mp4";
@@ -2811,6 +2850,7 @@ public class UpdateBridge {
         volatile String scanPaths = "";
         volatile boolean scanTruncated = false;
         volatile int scanLimit = LOCAL_VIDEO_SCAN_LIMIT;
+        volatile String configRevision = EvergreenConfig.DEFAULT_REVISION;
 
         LocalVideoScanTask(String id) {
             this.id = id;
@@ -2831,6 +2871,7 @@ public class UpdateBridge {
             scanPaths = result.optString("scanPaths", "");
             scanTruncated = result.optBoolean("scanTruncated", false);
             scanLimit = result.optInt("scanLimit", LOCAL_VIDEO_SCAN_LIMIT);
+            configRevision = result.optString("configRevision", configRevision);
         }
 
         void fail(String errorMessage) {
@@ -2853,6 +2894,8 @@ public class UpdateBridge {
                 if (scanPaths.length() > 0) object.put("scanPaths", scanPaths);
                 object.put("scanTruncated", scanTruncated);
                 object.put("scanLimit", scanLimit);
+                object.put("configRevision", configRevision);
+                object.put("nativeBridgeVersion", EvergreenConfig.BRIDGE_VERSION);
             } catch (JSONException ignored) {
                 // In-memory values are simple JSON-compatible values.
             }
@@ -2965,6 +3008,7 @@ public class UpdateBridge {
         final String mimeType;
         final long size;
         final long expiresAt;
+        final EvergreenConfig config;
         final VideoPrepareTask prepareTask;
         volatile boolean prepareStarted = false;
         volatile String prepareWarning = "";
@@ -2974,13 +3018,14 @@ public class UpdateBridge {
         volatile String phoneMimeType = "";
         volatile long phoneSize = -1L;
 
-        LocalVideoShare(String token, String source, String fileName, String mimeType, long size, long expiresAt) {
+        LocalVideoShare(String token, String source, String fileName, String mimeType, long size, long expiresAt, EvergreenConfig config) {
             this.token = token;
             this.source = source;
             this.fileName = fileName;
             this.mimeType = mimeType;
             this.size = size;
             this.expiresAt = expiresAt;
+            this.config = config;
             this.prepareTask = new VideoPrepareTask("share-prepare-" + token);
         }
     }
@@ -3004,6 +3049,26 @@ public class UpdateBridge {
         volatile int directories = 0;
         volatile int files = 0;
         volatile int unreadableDirectories = 0;
+    }
+
+    private String fileSystemIdentity(File file) {
+        if (file == null) return "missing";
+        try {
+            StructStat stat = Os.stat(file.getAbsolutePath());
+            return "inode:" + stat.st_dev + ":" + stat.st_ino;
+        } catch (Exception ignored) {
+            return "path:" + canonicalPath(file);
+        }
+    }
+
+    private static class ScanDirectory {
+        final File directory;
+        final int depth;
+
+        ScanDirectory(File directory, int depth) {
+            this.directory = directory;
+            this.depth = depth;
+        }
     }
 
     private static class InstalledInfo {

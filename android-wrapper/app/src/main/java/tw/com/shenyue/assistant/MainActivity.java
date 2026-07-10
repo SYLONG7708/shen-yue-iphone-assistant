@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Base64;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.ServiceWorkerController;
@@ -18,22 +19,33 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 
 public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST_CODE = 7708;
+    private static final String NATIVE_SESSION_STATE = "shen_yue_native_session";
     private WebView webView;
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
     private ValueCallback<Uri[]> filePathCallback;
     private UpdateBridge updateBridge;
+    private String nativeSessionToken;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        nativeSessionToken = savedInstanceState == null ? "" : savedInstanceState.getString(NATIVE_SESSION_STATE, "");
+        if (nativeSessionToken.length() < 40) nativeSessionToken = createNativeSessionToken();
         getWindow().setStatusBarColor(Color.rgb(7, 16, 24));
         getWindow().setNavigationBarColor(Color.rgb(7, 16, 24));
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            WebView.setWebContentsDebuggingEnabled(false);
+        }
 
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(7, 16, 24));
@@ -51,6 +63,8 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setGeolocationEnabled(false);
+        settings.setSaveFormData(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             settings.setOffscreenPreRaster(true);
         }
@@ -58,10 +72,18 @@ public class MainActivity extends Activity {
 
         if (BuildConfig.HOME_URL.startsWith("https://")) {
             configureLiveCloudLoading(settings);
+            settings.setAllowFileAccess(false);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                settings.setAllowFileAccessFromFileURLs(false);
+                settings.setAllowUniversalAccessFromFileURLs(false);
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+            }
         }
 
         updateBridge = new UpdateBridge(this);
-        webView.addJavascriptInterface(updateBridge, "ShenYueUpdater");
+        webView.addJavascriptInterface(new SecureUpdateBridge(updateBridge, nativeSessionToken), "ShenYueNativeRaw");
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -113,6 +135,7 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request != null && !request.isForMainFrame()) return false;
                 return handleUrl(view, request.getUrl().toString());
             }
 
@@ -124,6 +147,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                if (isTrustedAppUrl(url)) view.evaluateJavascript(nativeBridgeBootstrapScript(), null);
             }
         });
 
@@ -185,7 +209,7 @@ public class MainActivity extends Activity {
                 if (acceptType == null) continue;
                 String[] parts = acceptType.split(",");
                 for (String part : parts) {
-                    String value = part.trim().toLowerCase();
+                    String value = part.trim().toLowerCase(java.util.Locale.US);
                     if (value.length() == 0) continue;
                     if (value.startsWith(".")) {
                         if (".mp4".equals(value) || ".m4v".equals(value) || ".mov".equals(value)
@@ -220,8 +244,8 @@ public class MainActivity extends Activity {
         String scheme = uri.getScheme();
         String host = uri.getHost();
 
-        if ("file".equals(scheme)) return false;
-        if ("https".equals(scheme) && "sylong7708.github.io".equals(host)) {
+        if ("file".equals(scheme) && isTrustedAppUrl(url)) return false;
+        if ("https".equals(scheme) && isTrustedAppUrl(url)) {
             return false;
         }
         if ("https".equals(scheme) && isInlineVideoHost(host)) return false;
@@ -245,10 +269,20 @@ public class MainActivity extends Activity {
 
     private void loadHomePage() {
         if (BuildConfig.HOME_URL.startsWith("https://")) {
-            webView.loadUrl(withCacheBuster(BuildConfig.HOME_URL));
+            webView.loadUrl(withNativeSession(withCacheBuster(BuildConfig.HOME_URL)));
             return;
         }
-        webView.loadUrl(BuildConfig.HOME_URL);
+        webView.loadUrl(withNativeSession(BuildConfig.HOME_URL));
+    }
+
+    private String withNativeSession(String url) {
+        if (url == null || url.length() == 0) return url;
+        return Uri.parse(url)
+                .buildUpon()
+                // A fragment never leaves the device in the HTTP request or Referer header.
+                .encodedFragment("_native_session=" + Uri.encode(nativeSessionToken))
+                .build()
+                .toString();
     }
 
     private String withCacheBuster(String url) {
@@ -262,13 +296,18 @@ public class MainActivity extends Activity {
 
     private boolean isInlineVideoHost(String host) {
         if (host == null) return false;
-        return host.endsWith("youtube.com")
-                || host.endsWith("youtube-nocookie.com")
-                || host.equals("youtu.be")
-                || host.endsWith("ytimg.com")
-                || host.endsWith("googlevideo.com")
-                || host.endsWith("vimeo.com")
-                || host.endsWith("vimeocdn.com");
+        String value = host.toLowerCase(java.util.Locale.US);
+        return isHostOrSubdomain(value, "youtube.com")
+                || isHostOrSubdomain(value, "youtube-nocookie.com")
+                || value.equals("youtu.be")
+                || isHostOrSubdomain(value, "ytimg.com")
+                || isHostOrSubdomain(value, "googlevideo.com")
+                || isHostOrSubdomain(value, "vimeo.com")
+                || isHostOrSubdomain(value, "vimeocdn.com");
+    }
+
+    private boolean isHostOrSubdomain(String host, String trustedHost) {
+        return host.equals(trustedHost) || host.endsWith("." + trustedHost);
     }
 
     private void hideCustomView() {
@@ -327,9 +366,54 @@ public class MainActivity extends Activity {
         filePathCallback = null;
     }
 
+    private boolean isTrustedAppUrl(String value) {
+        if (value == null || value.length() == 0) return false;
+        try {
+            Uri uri = Uri.parse(value);
+            if ("file".equalsIgnoreCase(uri.getScheme())) {
+                String path = uri.getPath() == null ? "" : uri.getPath();
+                return path.startsWith("/android_asset/www/") || path.equals("/android_asset/www/index.html");
+            }
+            if (!"https".equalsIgnoreCase(uri.getScheme())) return false;
+            if (!"sylong7708.github.io".equalsIgnoreCase(uri.getHost())) return false;
+            String path = uri.getPath() == null ? "" : uri.getPath();
+            return path.equals("/shen-yue-iphone-assistant") || path.startsWith("/shen-yue-iphone-assistant/");
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private String createNativeSessionToken() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.encodeToString(bytes, Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+    }
+
+    private String nativeBridgeBootstrapScript() {
+        String methods = "['shareText','getDeviceState','getBundledManifest','getInstalledInfo','getInstalledBatch',"
+                + "'downloadAndInstall','getTaskStatus','openInstallPermission','getVideoAccessState','requestVideoAccess',"
+                + "'listLocalVideos','listLocalVideosAsync','getLocalVideoScanStatus','prepareLocalVideo',"
+                + "'prepareLocalVideoAsync','getLocalVideoPrepareStatus','uploadLocalVideo','uploadLocalVideoOriginal',"
+                + "'uploadLocalVideoAsync','uploadLocalVideoOriginalAsync','getLocalVideoUploadStatus',"
+                + "'createLocalVideoShare','createLastSelectedVideoShare','inspectLastSelectedApk',"
+                + "'getNativeCapabilities','configureEvergreen']";
+        return "(()=>{try{"
+                + "const token=" + JSONObject.quote(nativeSessionToken) + ";"
+                + "sessionStorage.setItem('shenYueNativeSession',token);"
+                + "const raw=window.ShenYueNativeRaw;"
+                + "if(raw&&!window.ShenYueUpdater){"
+                + "const call=(name)=>(...args)=>raw.invoke(token,name,JSON.stringify(args.map((value)=>value==null?'':String(value))));"
+                + "if(typeof Proxy==='function'){window.ShenYueUpdater=new Proxy({}, {get:(_,name)=>name==='then'?undefined:call(String(name))});}"
+                + "else{" + methods + ".forEach((name)=>{(window.ShenYueUpdater||(window.ShenYueUpdater={}))[name]=call(name);});}"
+                + "}"
+                + "window.dispatchEvent(new CustomEvent('shenYueNativeReady',{detail:{bridgeVersion:2}}));"
+                + "}catch(error){}})();";
+    }
+
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
+        outState.putString(NATIVE_SESSION_STATE, nativeSessionToken);
         if (webView != null) {
             webView.saveState(outState);
         }

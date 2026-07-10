@@ -22,7 +22,7 @@ public class ReplayFileProvider extends ContentProvider {
 
     @Override
     public String getType(Uri uri) {
-        String type = URLConnection.guessContentTypeFromName(uri == null ? "" : uri.getLastPathSegment());
+        String type = URLConnection.guessContentTypeFromName(displayName(uri));
         return type == null || type.length() == 0 ? "video/mp4" : type;
     }
 
@@ -46,7 +46,7 @@ public class ReplayFileProvider extends ContentProvider {
         MatrixCursor cursor = new MatrixCursor(columns, 1);
         MatrixCursor.RowBuilder row = cursor.newRow();
         for (String column : columns) {
-            if (OpenableColumns.DISPLAY_NAME.equals(column)) row.add(file.getName());
+            if (OpenableColumns.DISPLAY_NAME.equals(column)) row.add(displayName(uri));
             else if (OpenableColumns.SIZE.equals(column)) row.add(file.length());
             else row.add(null);
         }
@@ -77,6 +77,13 @@ public class ReplayFileProvider extends ContentProvider {
         } catch (Exception error) {
             throw new FileNotFoundException(error.getMessage());
         }
+    }
+
+    private String displayName(Uri uri) {
+        String requested = uri == null ? "" : uri.getQueryParameter("name");
+        if (requested != null && requested.length() > 0) return new File(requested).getName();
+        String fallback = uri == null ? "" : uri.getLastPathSegment();
+        return fallback == null || fallback.length() == 0 ? "replay-video.mp4" : new File(fallback).getName();
     }
 
     @Override

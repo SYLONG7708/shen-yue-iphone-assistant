@@ -4,6 +4,7 @@ def generatedWebAssetsDir = layout.buildDirectory.dir("generated/assets/builtIn"
 def webAssetNames = [
     "index.html",
     "app.js",
+    "native-bridge.js",
     "styles.css",
     "service-worker.js",
     "manifest.webmanifest",
@@ -45,8 +46,8 @@ android {
         applicationId "tw.com.shenyue.assistant"
         minSdk 23
         targetSdk 36
-        versionCode 135
-        versionName "1.0.35"
+        versionCode 136
+        versionName "1.0.36"
     }
 
     flavorDimensions "content"
