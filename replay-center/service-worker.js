@@ -1,5 +1,5 @@
-const CACHE_NAME = 'replay-center-v25-usb3-full-file-share'
-const STATIC_ASSETS = ['/', '/remote-config.json', '/manifest.webmanifest', '/favicon.svg']
+const CACHE_NAME = 'replay-center-v26-evergreen-native-core'
+const STATIC_ASSETS = ['./', './index.html', './compat-app.js', '../native-bridge.js', './remote-config.json', './native-config.json', './manifest.webmanifest', './favicon.svg']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -23,8 +23,17 @@ self.addEventListener('fetch', (event) => {
   const request = event.request
   if (request.method !== 'GET') return
 
-  if (new URL(request.url).pathname.endsWith('/remote-config.json')) {
-    event.respondWith(fetch(request).catch(() => caches.match(request)))
+  const requestUrl = new URL(request.url)
+  if (/\/(?:remote|native)-config\.json$/.test(requestUrl.pathname)) {
+    const stableKey = requestUrl.origin + requestUrl.pathname
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(stableKey, response.clone()))
+          return response
+        })
+        .catch(() => caches.match(stableKey)),
+    )
     return
   }
 

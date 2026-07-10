@@ -1,9 +1,10 @@
-const cacheName = "shen-yue-assistant-v255-replay-usb3-full-file-share";
+const cacheName = "shen-yue-assistant-v256-evergreen-native-core";
 const assets = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./native-bridge.js",
   "./updates.json",
   "./shen-yue-assistant-content.json",
   "./manifest.webmanifest",
@@ -14,6 +15,7 @@ const assets = [
   "./replay-center/compat-app.js",
   "./replay-center/watch/index.html",
   "./replay-center/remote-config.json",
+  "./replay-center/native-config.json",
   "./replay-center/manifest.webmanifest",
   "./replay-center/favicon.svg",
   "./assets/app-logo.png",
@@ -49,14 +51,34 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
+  const requestUrl = new URL(event.request.url);
+  const isMutableConfig = /\/(?:remote|native)-config\.json$/.test(requestUrl.pathname);
+  if (isMutableConfig) {
+    const stableKey = requestUrl.origin + requestUrl.pathname;
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        if (response.ok && requestUrl.origin === location.origin) {
+          caches.open(cacheName).then((cache) => cache.put(stableKey, response.clone()));
+        }
+        return response;
+      }).catch(() => caches.match(stableKey))
+    );
+    return;
+  }
+
+  const hasEphemeralCacheBuster = requestUrl.searchParams.has("_apk_live")
+    || requestUrl.searchParams.has("_evergreen");
+  const stableRequestKey = hasEphemeralCacheBuster
+    ? requestUrl.origin + requestUrl.pathname
+    : event.request;
+
   event.respondWith(
     fetch(event.request).then((response) => {
-      const requestUrl = new URL(event.request.url);
       if (response.ok && requestUrl.origin === location.origin) {
         const responseCopy = response.clone();
-        caches.open(cacheName).then((cache) => cache.put(event.request, responseCopy));
+        caches.open(cacheName).then((cache) => cache.put(stableRequestKey, responseCopy));
       }
       return response;
-    }).catch(() => caches.match(event.request))
+    }).catch(() => caches.match(stableRequestKey))
   );
 });

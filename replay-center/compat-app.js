@@ -13,6 +13,8 @@
   var nativeVideoVisibleCount = 200
   var nativeVideoFilter = ''
   var nativeVideoSourceFilter = ''
+  var nativeConfigSettled = !window.ShenYueNativeConfigReady
+  var nativeConfigWaitQueued = false
   var NATIVE_VIDEO_PAGE_SIZE = 200
 
   var defaults = {
@@ -74,16 +76,51 @@
       setStatus('ready', '請先設定上傳 API，再選擇影片上傳。')
     }
 
-    if (hasNativeVideoBridge()) {
-      el.nativeVideoTools.className = 'native-video-tools'
-      el.runtimeBadge.className = 'badge'
-      el.runtimeBadge.innerHTML = 'Android APK 車機模式'
-      refreshNativeAccessState()
+    activateNativeMode()
+
+    if (window.ShenYueNativeConfigReady && typeof window.ShenYueNativeConfigReady.then === 'function') {
+      window.ShenYueNativeConfigReady.then(function (state) {
+        nativeConfigSettled = true
+        nativeConfigWaitQueued = false
+        showNativeCapabilities(state)
+        refreshNativeAccessState()
+      })
     }
+
+    window.addEventListener('shenYueNativeReady', activateNativeMode)
+    window.addEventListener('shenYueEvergreenReady', function (event) {
+      nativeConfigSettled = true
+      nativeConfigWaitQueued = false
+      showNativeCapabilities(event && event.detail)
+    })
 
     if (window.Capacitor) {
       el.runtimeBadge.innerHTML = 'Capacitor WebView 相容模式'
     }
+  }
+
+  function activateNativeMode() {
+    if (!hasNativeVideoBridge()) return
+    el.nativeVideoTools.className = 'native-video-tools'
+    el.runtimeBadge.className = 'badge'
+    showNativeCapabilities(window.ShenYueNativeConfigState)
+    refreshNativeAccessState()
+  }
+
+  function showNativeCapabilities(configState) {
+    if (!hasNativeVideoBridge()) return
+    var state = configState || {}
+    if (window.ShenYueUpdater && typeof window.ShenYueUpdater.getNativeCapabilities === 'function') {
+      try {
+        var capabilities = parseNativeResult(window.ShenYueUpdater.getNativeCapabilities())
+        if (capabilities.ok) state = capabilities
+      } catch (error) {
+        // Keep the config state already supplied by native-bridge.js.
+      }
+    }
+    var bridgeVersion = state.bridgeVersion || state.nativeBridgeVersion || 1
+    var revision = state.revision || state.activeRevision || '內建設定'
+    el.runtimeBadge.innerHTML = 'Android 常青雲端核心 v' + escapeHtml(bridgeVersion) + '｜' + escapeHtml(revision)
   }
 
   function bindInputs() {
@@ -313,6 +350,18 @@
   }
 
   function scanNativeVideos() {
+    if (!nativeConfigSettled && window.ShenYueNativeConfigReady && typeof window.ShenYueNativeConfigReady.then === 'function') {
+      setStatus('busy', '正在同步 GitHub 常青掃描規則...')
+      if (!nativeConfigWaitQueued) {
+        nativeConfigWaitQueued = true
+        window.ShenYueNativeConfigReady.then(function () {
+          nativeConfigSettled = true
+          nativeConfigWaitQueued = false
+          scanNativeVideos()
+        })
+      }
+      return
+    }
     if (!hasNativeVideoBridge()) {
       setStatus('error', '目前不是 Android APK 車機模式，請使用上方選檔。')
       return
