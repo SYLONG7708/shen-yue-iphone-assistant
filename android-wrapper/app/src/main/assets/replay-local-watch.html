@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="theme-color" content="#071018">
+    <title>申悅回放中心</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+        background: #071018;
+        color: #f4f8fa;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 50% -20%, rgba(42, 172, 214, .26), transparent 48%),
+          linear-gradient(180deg, #071018, #0a151e 58%, #071018);
+      }
+
+      main {
+        width: min(760px, 100%);
+        margin: 0 auto;
+        padding: max(22px, env(safe-area-inset-top)) 18px max(30px, env(safe-area-inset-bottom));
+      }
+
+      .brand {
+        margin: 0 0 6px;
+        color: #66dcff;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: .16em;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(24px, 6vw, 36px);
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+
+      .meta {
+        margin: 10px 0 0;
+        color: #aebcc5;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .card {
+        margin-top: 20px;
+        padding: clamp(20px, 5vw, 30px);
+        border: 1px solid rgba(118, 214, 242, .2);
+        border-radius: 22px;
+        background: rgba(11, 26, 36, .88);
+        box-shadow: 0 22px 70px rgba(0, 0, 0, .3);
+      }
+
+      .percent {
+        margin: 4px 0 2px;
+        color: #fff;
+        font-size: clamp(62px, 20vw, 118px);
+        font-variant-numeric: tabular-nums;
+        font-weight: 900;
+        line-height: 1;
+        text-align: center;
+      }
+
+      .stage {
+        min-height: 26px;
+        margin: 12px 0 0;
+        color: #d9e5ea;
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 1.5;
+        text-align: center;
+      }
+
+      .bar {
+        height: 14px;
+        margin-top: 20px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #1c2a33;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+      }
+
+      .bar > span {
+        display: block;
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #1ab3d7, #67e4ff);
+        transition: width .16s linear;
+      }
+
+      .detail {
+        margin: 14px 0 0;
+        color: #92a7b2;
+        font-size: 13px;
+        line-height: 1.55;
+        text-align: center;
+      }
+
+      .notice {
+        margin-top: 16px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: rgba(41, 162, 199, .11);
+        color: #c7eaf4;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .notice.error {
+        background: rgba(229, 63, 76, .13);
+        color: #ffc7cd;
+      }
+
+      .hidden { display: none !important; }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      button, .button {
+        display: flex;
+        min-height: 52px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255,255,255,.1);
+        border-radius: 13px;
+        padding: 13px 16px;
+        background: #233541;
+        color: #fff;
+        font: inherit;
+        font-weight: 800;
+        text-align: center;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      button.primary, .button.primary {
+        border-color: transparent;
+        background: linear-gradient(135deg, #e52f48, #b9122b);
+      }
+
+      button.secondary { background: #173343; }
+      button:disabled { cursor: wait; opacity: .55; }
+
+      .complete-title {
+        margin: 0;
+        color: #70e6a4;
+        font-size: 24px;
+        text-align: center;
+      }
+
+      .complete-copy {
+        margin: 10px 0 0;
+        color: #c8d5db;
+        line-height: 1.6;
+        text-align: center;
+      }
+
+      @media (min-width: 620px) {
+        .actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .actions .wide { grid-column: 1 / -1; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="brand">SHEN YUE REPLAY</p>
+      <h1 id="fileName">環景影片</h1>
+      <p class="meta" id="fileMeta">正在連接車機...</p>
+
+      <section class="card" aria-live="polite">
+        <div class="percent" id="percent">0%</div>
+        <div class="stage" id="stage">正在準備完整影片</div>
+        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress">
+          <span id="progressBar"></span>
+        </div>
+        <div class="detail" id="detail">請保持手機與車機連在同一個 Wi‑Fi 或熱點。</div>
+        <div class="notice hidden" id="notice"></div>
+
+        <div class="actions hidden" id="retryActions">
+          <button type="button" class="primary wide" id="retry">重新下載完整影片</button>
+          <a class="button wide" id="original" href="#">下載原始檔備援</a>
+        </div>
+        <div class="actions hidden" id="receiverActions">
+          <a class="button primary wide" id="openReceiver" href="#">用申悅 App 原生接收並分享到 LINE</a>
+        </div>
+      </section>
+
+      <section class="card hidden" id="completePanel">
+        <h2 class="complete-title">完整影片已下載 100%</h2>
+        <p class="complete-copy">已核對下載位元數。安全瀏覽器可直接分享完整檔案；Android 若未出現檔案分享，請改用申悅 App 原生接收。</p>
+        <div class="actions">
+          <button type="button" class="primary wide" id="shareSystem">分享完整影片</button>
+          <button type="button" class="secondary" id="shareLine">分享到 LINE</button>
+          <button type="button" class="secondary" id="shareFacebook">分享到 Facebook／Messenger</button>
+          <button type="button" class="secondary" id="shareWechat">分享到微信</button>
+          <button type="button" id="saveAgain">再次儲存完整影片</button>
+        </div>
+        <div class="notice hidden" id="shareNotice"></div>
+      </section>
+    </main>
+
+    <script>
+      (() => {
+        "use strict";
+
+        const boot = __SHENYUE_BOOTSTRAP_JSON__;
+        const byId = (id) => document.getElementById(id);
+        const fileName = byId("fileName");
+        const fileMeta = byId("fileMeta");
+        const percent = byId("percent");
+        const stage = byId("stage");
+        const progress = byId("progress");
+        const progressBar = byId("progressBar");
+        const detail = byId("detail");
+        const notice = byId("notice");
+        const retryActions = byId("retryActions");
+        const receiverActions = byId("receiverActions");
+        const openReceiver = byId("openReceiver");
+        const retry = byId("retry");
+        const original = byId("original");
+        const completePanel = byId("completePanel");
+        const shareNotice = byId("shareNotice");
+
+        let activeRun = 0;
+        let downloadedBlob = null;
+        let downloadedFile = null;
+        let objectUrl = "";
+        let finalName = boot.fileName || "replay-video.mp4";
+        let finalMime = boot.mimeType || "video/mp4";
+        let finalSize = Number(boot.size || 0);
+
+        fileName.textContent = finalName;
+        original.href = boot.originalUrl || "#";
+        if (boot.receiverUrl && /Android/i.test(navigator.userAgent || "")) {
+          openReceiver.href = boot.receiverUrl;
+          receiverActions.classList.remove("hidden");
+        }
+
+        function formatBytes(value) {
+          const bytes = Number(value || 0);
+          if (!bytes) return "大小讀取中";
+          const units = ["B", "KB", "MB", "GB"];
+          let amount = bytes;
+          let index = 0;
+          while (amount >= 1024 && index < units.length - 1) {
+            amount /= 1024;
+            index += 1;
+          }
+          return `${amount.toFixed(index ? 1 : 0)} ${units[index]}`;
+        }
+
+        function setProgress(value, text) {
+          const next = Math.max(0, Math.min(100, Math.floor(Number(value) || 0)));
+          percent.textContent = `${next}%`;
+          progressBar.style.width = `${next}%`;
+          progress.setAttribute("aria-valuenow", String(next));
+          if (text) stage.textContent = text;
+        }
+
+        function setNotice(message, isError = false) {
+          notice.textContent = message || "";
+          notice.classList.toggle("hidden", !message);
+          notice.classList.toggle("error", Boolean(isError));
+        }
+
+        function setShareNotice(message, isError = false) {
+          shareNotice.textContent = message || "";
+          shareNotice.classList.toggle("hidden", !message);
+          shareNotice.classList.toggle("error", Boolean(isError));
+        }
+
+        function delay(ms) {
+          return new Promise((resolve) => window.setTimeout(resolve, ms));
+        }
+
+        async function waitForPrepared(run) {
+          for (let attempt = 0; attempt < 1200; attempt += 1) {
+            if (run !== activeRun) throw new Error("下載已取消");
+            const response = await fetch(`${boot.statusUrl}?t=${Date.now().toString(36)}`, { cache: "no-store" });
+            if (!response.ok) throw new Error(`車機準備狀態讀取失敗（HTTP ${response.status}）`);
+            const state = await response.json();
+            if (!state.ok) throw new Error(state.message || "影片準備失敗");
+
+            const prepareProgress = Math.max(0, Math.min(99, Number(state.progress || 0)));
+            stage.textContent = state.message || "正在準備手機可用影片";
+            detail.textContent = `影片準備 ${prepareProgress}%｜下載會在準備完成後自動開始`;
+            fileMeta.textContent = `${state.fileName || finalName}｜${formatBytes(state.size || finalSize)}`;
+            if (state.warning) setNotice(state.warning, false);
+
+            if (state.status === "done") {
+              finalName = state.fileName || finalName;
+              finalMime = state.mimeType || finalMime;
+              finalSize = Number(state.size || finalSize || 0);
+              fileName.textContent = finalName;
+              fileMeta.textContent = `${formatBytes(finalSize)}｜${finalMime}`;
+              return state;
+            }
+            if (state.status === "failed") throw new Error(state.message || "影片準備失敗");
+            await delay(500);
+          }
+          throw new Error("影片準備逾時，請重新選取影片產生 QR。");
+        }
+
+        function parseTotal(response, alreadyLoaded) {
+          const contentRange = response.headers.get("content-range") || "";
+          const rangeMatch = contentRange.match(/\/([0-9]+)$/);
+          if (rangeMatch) return Number(rangeMatch[1]);
+          const length = Number(response.headers.get("content-length") || 0);
+          return length > 0 ? alreadyLoaded + length : 0;
+        }
+
+        async function fetchCompleteFile(run) {
+          const chunks = [];
+          let loaded = 0;
+          let total = finalSize > 0 ? finalSize : 0;
+          let retries = 0;
+
+          while (retries < 4) {
+            if (run !== activeRun) throw new Error("下載已取消");
+            const controller = new AbortController();
+            let stallTimer = 0;
+            const resetStallTimer = () => {
+              window.clearTimeout(stallTimer);
+              stallTimer = window.setTimeout(() => controller.abort(), 45000);
+            };
+            resetStallTimer();
+
+            try {
+              const headers = loaded > 0 ? { Range: `bytes=${loaded}-` } : {};
+              const response = await fetch(`${boot.downloadUrl}${boot.downloadUrl.includes("?") ? "&" : "?"}stream=${Date.now().toString(36)}`, {
+                cache: "no-store",
+                headers,
+                signal: controller.signal
+              });
+              if (!response.ok && response.status !== 206) throw new Error(`HTTP ${response.status}`);
+              if (!response.body) throw new Error("此瀏覽器不支援串流下載進度");
+
+              if (loaded > 0 && response.status === 200) {
+                chunks.length = 0;
+                loaded = 0;
+              }
+              total = parseTotal(response, loaded) || total;
+              if (!total || total < 1024) throw new Error("車機沒有回傳有效的完整檔案大小");
+
+              const reader = response.body.getReader();
+              while (true) {
+                const next = await reader.read();
+                if (next.done) break;
+                if (run !== activeRun) throw new Error("下載已取消");
+                resetStallTimer();
+                chunks.push(next.value);
+                loaded += next.value.byteLength;
+                const value = Math.min(99, Math.floor((loaded * 100) / total));
+                setProgress(value, `正在下載完整影片 ${value}%`);
+                detail.textContent = `${formatBytes(loaded)} / ${formatBytes(total)}`;
+              }
+              window.clearTimeout(stallTimer);
+
+              if (loaded === total) break;
+              if (loaded > total) throw new Error("收到的影片大小超過車機標示大小");
+              retries += 1;
+              stage.textContent = `連線中斷，正在從 ${Math.floor((loaded * 100) / total)}% 自動續傳`;
+              await delay(700 * retries);
+            } catch (error) {
+              window.clearTimeout(stallTimer);
+              retries += 1;
+              if (retries >= 4) throw error;
+              stage.textContent = `連線不穩，正在自動續傳（${retries}/3）`;
+              await delay(900 * retries);
+            }
+          }
+
+          if (!total || loaded !== total) {
+            throw new Error(`完整性檢查失敗：已收到 ${loaded} bytes，應為 ${total} bytes`);
+          }
+          const blob = new Blob(chunks, { type: finalMime || "video/mp4" });
+          if (blob.size !== total) throw new Error("影片 Blob 大小驗證失敗");
+          return blob;
+        }
+
+        function saveBlob(blob) {
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+          objectUrl = URL.createObjectURL(blob);
+          const anchor = document.createElement("a");
+          anchor.href = objectUrl;
+          anchor.download = finalName;
+          anchor.rel = "noopener";
+          anchor.style.display = "none";
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+        }
+
+        async function startDownload() {
+          const run = ++activeRun;
+          downloadedBlob = null;
+          downloadedFile = null;
+          completePanel.classList.add("hidden");
+          retryActions.classList.add("hidden");
+          setNotice("", false);
+          setProgress(0, "正在準備完整影片");
+          detail.textContent = "請保持手機與車機連在同一個 Wi‑Fi 或熱點。";
+
+          try {
+            await waitForPrepared(run);
+            if (run !== activeRun) return;
+            setProgress(0, "準備完成，開始下載完整影片");
+            downloadedBlob = await fetchCompleteFile(run);
+            if (run !== activeRun) return;
+            try {
+              downloadedFile = new File([downloadedBlob], finalName, { type: finalMime || downloadedBlob.type || "video/mp4" });
+            } catch {
+              downloadedFile = null;
+            }
+            setProgress(100, "下載完成 100%｜完整性驗證通過");
+            detail.textContent = `${formatBytes(downloadedBlob.size)}｜已完整接收`;
+            saveBlob(downloadedBlob);
+            completePanel.classList.remove("hidden");
+            completePanel.scrollIntoView({ behavior: "smooth", block: "start" });
+          } catch (error) {
+            if (run !== activeRun) return;
+            stage.textContent = "尚未完成下載";
+            setNotice(error && error.message ? error.message : "下載失敗，請重試。", true);
+            retryActions.classList.remove("hidden");
+          }
+        }
+
+        async function shareFullFile(targetName) {
+          if (!downloadedBlob) {
+            setShareNotice("完整影片尚未下載完成，請先重新下載。", true);
+            return;
+          }
+          if (!downloadedFile) {
+            try {
+              downloadedFile = new File([downloadedBlob], finalName, { type: finalMime || downloadedBlob.type || "video/mp4" });
+            } catch {
+              downloadedFile = null;
+            }
+          }
+
+          const shareData = {
+            title: finalName,
+            text: `申悅回放中心｜${finalName}`,
+            files: downloadedFile ? [downloadedFile] : []
+          };
+          const canShareFiles = Boolean(
+            navigator.share
+            && downloadedFile
+            && (!navigator.canShare || navigator.canShare({ files: [downloadedFile] }))
+          );
+          if (!canShareFiles) {
+            setShareNotice(`此內建瀏覽器不支援完整影片檔案分享。影片已下載完成，請用系統瀏覽器開啟 QR，或到「下載」資料夾選取影片後分享到 ${targetName || "通訊 APP"}。`, true);
+            return;
+          }
+
+          try {
+            setShareNotice(targetName ? `分享視窗開啟後，請選擇 ${targetName}。` : "正在開啟完整影片分享視窗。", false);
+            await navigator.share(shareData);
+            setShareNotice("完整影片分享視窗已完成。", false);
+          } catch (error) {
+            if (error && error.name === "AbortError") {
+              setShareNotice("已取消分享，完整影片仍保留在本頁與下載資料夾。", false);
+            } else {
+              setShareNotice("無法由此瀏覽器傳送檔案；請到下載資料夾選取完整影片後分享。", true);
+            }
+          }
+        }
+
+        retry.addEventListener("click", startDownload);
+        byId("saveAgain").addEventListener("click", () => downloadedBlob && saveBlob(downloadedBlob));
+        byId("shareSystem").addEventListener("click", () => shareFullFile("通訊 APP"));
+        byId("shareLine").addEventListener("click", () => shareFullFile("LINE"));
+        byId("shareFacebook").addEventListener("click", () => shareFullFile("Facebook 或 Messenger"));
+        byId("shareWechat").addEventListener("click", () => shareFullFile("微信"));
+        window.addEventListener("beforeunload", () => objectUrl && URL.revokeObjectURL(objectUrl));
+
+        startDownload();
+      })();
+    </script>
+  </body>
+</html>

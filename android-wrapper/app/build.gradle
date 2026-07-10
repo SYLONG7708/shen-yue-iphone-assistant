@@ -45,8 +45,8 @@ android {
         applicationId "tw.com.shenyue.assistant"
         minSdk 23
         targetSdk 36
-        versionCode 133
-        versionName "1.0.33"
+        versionCode 135
+        versionName "1.0.35"
     }
 
     flavorDimensions "content"
@@ -138,6 +138,10 @@ android {
         buildConfig true
         resValues true
     }
+}
+
+dependencies {
+    implementation "com.google.zxing:core:3.5.4"
 }
 
 tasks.withType(JavaCompile).configureEach {
