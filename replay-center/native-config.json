@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "minimumBridgeVersion": 2,
-  "revision": "2026-07-10-github-live-verified-1.0.36",
-  "updatedAt": "2026-07-10T22:00:43+08:00",
+  "revision": "2026-07-11-unified-browser-qr-1.0.36",
+  "updatedAt": "2026-07-11T15:17:25+08:00",
   "scan": {
     "rawFiles": true,
     "mediaStore": true,

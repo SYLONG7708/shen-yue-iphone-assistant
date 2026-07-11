@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#090b0c" />
     <meta
       name="description"
-      content="回放中心：車載 Android 影片上傳、一次性 QR、手機觀看與下載測試版。"
+      content="回放中心：車載 Android 完整環景影片、唯一通用 QR、手機免安裝 APP 直接下載。"
     />
     <title>回放中心</title>
     <script>
@@ -449,11 +449,6 @@
         background: #fff;
       }
 
-      .qr-option-primary {
-        border: 3px solid #cf263f;
-        background: #fff8f9;
-      }
-
       .result-box {
         margin-top: 12px;
         border: 1px solid rgba(168, 212, 93, 0.18);
@@ -531,9 +526,9 @@
 
       <section class="metric-row" aria-label="流程">
         <div class="metric"><span>流程 1</span><strong>選擇影片</strong></div>
-        <div class="metric"><span>流程 2</span><strong>上傳雲端</strong></div>
-        <div class="metric"><span>流程 3</span><strong>產生 QR</strong></div>
-        <div class="metric"><span>流程 4</span><strong>手機觀看下載</strong></div>
+        <div class="metric"><span>流程 2</span><strong>準備完整影片</strong></div>
+        <div class="metric"><span>流程 3</span><strong>產生唯一 QR</strong></div>
+        <div class="metric"><span>流程 4</span><strong>掃碼完整下載</strong></div>
       </section>
 
       <div class="grid">
@@ -607,16 +602,16 @@
           <div class="panel qr-panel">
             <div class="panel-title">
               <div class="step-icon">QR</div>
-              <h2>一次性二維碼</h2>
+              <h2>唯一通用二維碼</h2>
             </div>
             <div class="qr-wrap" id="qrWrap">
               <div>
-                <strong>等待上傳完成</strong>
-                <p class="muted">完成後會顯示手機掃碼觀看與下載連結。</p>
+                <strong>等待影片準備完成</strong>
+                <p class="muted">完成後只顯示一個 QR；Android 手機用相機或 Google Lens 掃描即可完整下載，不需安裝 APP。</p>
               </div>
             </div>
             <div class="actions">
-              <a class="link-button is-disabled" id="openWatchButton" href="#" target="_blank" rel="noreferrer">開啟觀看頁</a>
+              <a class="link-button is-disabled" id="openWatchButton" href="#" target="_blank" rel="noreferrer">開啟完整下載頁</a>
               <button id="copyWatchButton" type="button" disabled>複製連結</button>
             </div>
             <div class="result-box" id="resultBox">尚未產生連結</div>
