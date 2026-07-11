@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v256-evergreen-native-core";
+const cacheName = "shen-yue-assistant-v257-unified-video-qr";
 const assets = [
   "./",
   "./index.html",

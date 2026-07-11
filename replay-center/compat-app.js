@@ -569,7 +569,7 @@
     el.fileMeta.innerHTML = formatBytes(item.size || 0) + ' / ' + (item.mimeType || 'video') + ' / ' + (item.source || 'USB 影片')
     el.uploadButton.disabled = true
     el.shareButton.disabled = true
-    el.resultBox.innerHTML = '已選擇車機影片，正在上傳並產生 QR。'
+    el.resultBox.innerHTML = '已選擇車機影片，正在準備完整影片並產生唯一 QR。'
     resetQr()
 
     if (selectedObjectUrl) URL.revokeObjectURL(selectedObjectUrl)
@@ -581,7 +581,7 @@
     selectedNativeVideo.uploadSize = item.size || 0
     selectedNativeVideo.uploadOriginal = true
     setProgress(4)
-    setStatus('busy', '已選擇車機影片，正在直接上傳並產生 QR。')
+    setStatus('busy', '已選擇車機影片，正在準備完整影片並產生唯一 QR。')
     autoUploadTimer = window.setTimeout(function () {
       autoUploadTimer = 0
       if (!selectedNativeVideo || selectedNativeVideo.uri !== item.uri) return
@@ -670,7 +670,7 @@
       (item.source || 'USB 影片')
     el.resultBox.innerHTML = selectedNativeVideo.uploadConverted
       ? '已將 TS 準備為 MP4，預覽與 QR 會使用 MP4。'
-      : '影片已準備完成，等待上傳。'
+      : '影片已準備完成，等待產生唯一 QR。'
     showNativePreview(prepared.uri)
     el.uploadButton.disabled = false
     setProgress(100, false)
@@ -690,7 +690,7 @@
       ' / ' +
       selectedNativeVideo.uploadMimeType +
       ' / 原始檔'
-    el.resultBox.innerHTML = 'MP4 準備失敗，仍可上傳原始影片產生 QR；手機可能需要下載或外部播放器。'
+    el.resultBox.innerHTML = 'MP4 準備失敗，仍可使用原始影片產生 QR；手機可能需要外部播放器。'
     if (item.uri) showNativePreview(item.uri)
     el.uploadButton.disabled = false
     setProgress(0, false)
@@ -758,7 +758,7 @@
 
   function resetQr() {
     el.qrWrap.innerHTML =
-      '<div><strong>等待上傳完成</strong><p class="muted">完成後會顯示手機掃碼觀看與下載連結。</p></div>'
+      '<div><strong>等待影片準備完成</strong><p class="muted">完成後只顯示一個 QR；Android 手機直接掃描即可完整下載，不需安裝 APP。</p></div>'
     el.openWatchButton.href = '#'
     el.openWatchButton.className = 'link-button is-disabled'
     el.copyWatchButton.disabled = true
@@ -863,7 +863,6 @@
     var watchUrl = localWatchUrl || result.cloudWatchUrl
     var downloadUrl = result.downloadUrl || ''
     var originalUrl = result.originalUrl || ''
-    var receiverUrl = result.receiverUrl || ''
     showShare(
       {
         watchUrl: watchUrl,
@@ -871,20 +870,17 @@
         downloadUrl: downloadUrl,
         originalUrl: originalUrl,
         qrDataUrl: result.qrDataUrl || '',
-        receiverUrl: receiverUrl,
-        receiverQrDataUrl: result.receiverQrDataUrl || '',
         mode: 'local-fast',
       },
       watchUrl
     )
     el.resultBox.innerHTML =
-      '本機快速 QR：<br><strong>' +
+      '唯一完整下載 QR：<br><strong>' +
       escapeHtml(watchUrl) +
       '</strong><br><br>' +
       (downloadUrl ? '下載 MP4：<br>' + escapeHtml(downloadUrl) + '<br><br>' : '') +
-      (receiverUrl ? 'Android 完整影片接收：<br>' + escapeHtml(receiverUrl) + '<br><br>' : '') +
       (localWatchUrl && localWatchUrl !== watchUrl ? '本機下載頁：<br>' + escapeHtml(localWatchUrl) + '<br><br>' : '') +
-      '手機掃碼後會自動下載，只顯示下載進度%；手機需與車機在同一個 Wi-Fi / 熱點網路。'
+      'Android 手機不需安裝申悅車機助手；使用相機或 Google Lens 掃描唯一 QR 後會直接完整下載。收到的位元組數與影片總大小一致才會顯示 100%；手機需與車機在同一個 Wi-Fi / 熱點網路。'
     return true
   }
 
@@ -1081,9 +1077,9 @@
     var isDirectFallback = shareResult.mode === 'direct-fallback'
     var isDirectProcessing = shareResult.mode === 'direct-processing'
     var isLocalFast = shareResult.mode === 'local-fast'
-    var qrTitle = isLocalFast ? '掃碼自動下載' : (isDirectFallback || isDirectProcessing ? '掃碼開啟影片連結' : '掃碼觀看影片')
+    var qrTitle = isLocalFast ? '掃碼直接下載完整環景影片' : (isDirectFallback || isDirectProcessing ? '掃碼開啟影片連結' : '掃碼觀看影片')
     var qrNote = '手機掃描後可觀看並下載。'
-    if (isLocalFast) qrNote = '本機快速 QR，不需上傳；掃碼後自動下載到手機，完成後可發送到 LINE、Facebook、微信或其他 APP。'
+    if (isLocalFast) qrNote = '唯一通用 QR：Android 手機不需安裝申悅車機助手。請用相機或 Google Lens 掃描；完整接收並驗證至 100% 後自動儲存，再從手機分享影片檔到 LINE、Facebook、微信或其他 APP。'
     if (isDirectProcessing) qrNote = '已先顯示影片直連 QR，正在建立一次性連結。'
     if (isDirectFallback) qrNote = '一次性 API 暫時失敗，已先顯示影片直連 QR。'
 
@@ -1092,20 +1088,10 @@
       qrDataUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(watchUrl)
     }
 
-    var receiverQrDataUrl = shareResult.receiverQrDataUrl || ''
-    var receiverUrl = shareResult.receiverUrl || ''
-    var qrHtml = ''
-    if (receiverQrDataUrl && receiverUrl) {
-      qrHtml =
-        '<div class="qr-option qr-option-primary"><img src="' +
-        escapeAttr(receiverQrDataUrl) +
-        '" alt="Android 完整影片分享 QR Code"><strong>Android 完整影片分享到 LINE</strong>' +
-        '<p class="muted">手機安裝同版申悅車機助手後掃此碼；原生接收至 100% 才開啟 LINE／Messenger／微信檔案分享。</p></div>'
-    }
-    qrHtml +=
+    var qrHtml =
       '<div class="qr-option"><img src="' +
       escapeAttr(qrDataUrl) +
-      '" alt="通用下載 QR Code"><strong>' +
+      '" alt="手機直接完整下載環景影片 QR Code"><strong>' +
       escapeHtml(qrTitle) +
       '</strong><p class="muted">' +
       escapeHtml(qrNote) +
@@ -1129,7 +1115,7 @@
       return
     }
     if (isLocalFast) {
-      setStatus('ready', '已建立本機快速 QR：不需上傳影片，手機和車機需在同一 Wi-Fi / 熱點。')
+      setStatus('ready', '已建立唯一通用 QR：Android 手機不需安裝 APP；使用相機或 Google Lens 掃描即可完整下載。手機和車機需在同一 Wi-Fi / 熱點。')
       return
     }
     setStatus('ready', '完整流程完成：影片已上傳，並已產生一次性 QR。')
