@@ -2,128 +2,35 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#071018">
-  <title>申悅更新中心一鍵上傳</title>
-  <link rel="icon" href="../assets/app-logo.png">
-  <link rel="stylesheet" href="styles.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta http-equiv="refresh" content="2;url=https://shen-yue-update-cloud.netlify.app/">
+  <title>申悅更新中心｜前往永久雲端版</title>
+  <style>
+    :root { color-scheme: dark; font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: radial-gradient(circle at top, #182a43, #07101d 64%); color: #f4f8ff; }
+    main { width: min(92vw, 560px); padding: 42px; border: 1px solid #284562; border-radius: 24px; background: rgba(12, 25, 42, .92); box-shadow: 0 24px 80px rgba(0,0,0,.38); text-align: center; }
+    .mark { display: inline-grid; place-items: center; width: 54px; height: 54px; border-radius: 16px; background: #48d4a0; color: #07131a; font-size: 28px; font-weight: 900; }
+    h1 { margin: 22px 0 10px; font-size: clamp(26px, 6vw, 38px); }
+    p { color: #b8c9dc; line-height: 1.8; }
+    a { display: inline-flex; margin-top: 14px; padding: 13px 22px; border-radius: 13px; background: #48d4a0; color: #06151a; font-weight: 800; text-decoration: none; }
+  </style>
 </head>
 <body>
-  <main class="upload-shell">
-    <section class="upload-main" aria-labelledby="upload-title">
-      <div class="upload-title">
-        <p>Shen Yue Update Uploader</p>
-        <h1 id="upload-title">申悅更新中心一鍵上傳</h1>
-        <span>選 APK 後會直接新增或替換 GitHub Release 檔案，並同步更新中心清單。</span>
-      </div>
-
-      <div class="status-strip" data-connection-status>尚未連線上傳服務</div>
-
-      <form class="upload-form" data-upload-form>
-        <fieldset class="mode-group" data-mode-group>
-          <legend>上傳模式</legend>
-          <label class="mode-card">
-            <input name="uploadMode" type="radio" value="replace" checked>
-            <strong>替換既有 APK</strong>
-            <span>更新已在清單中的 App</span>
-          </label>
-          <label class="mode-card">
-            <input name="uploadMode" type="radio" value="create">
-            <strong>新增新的 APK</strong>
-            <span>建立新的更新中心項目</span>
-          </label>
-        </fieldset>
-
-        <label>
-          上傳服務網址
-          <input name="apiBase" type="url" inputmode="url" placeholder="例如 https://xxxx.trycloudflare.com" autocomplete="off">
-        </label>
-        <label>
-          URL 密鑰
-          <input name="uploadKey" type="password" placeholder="由啟動工具自動帶入" autocomplete="off">
-        </label>
-        <label data-replace-field>
-          替換目標
-          <select name="itemId" data-target-select>
-            <option value="">自動依 APK 套件判斷</option>
-          </select>
-        </label>
-        <label>
-          Release 檔名
-          <input name="assetName" type="text" placeholder="自動沿用原檔名，新增時可留空">
-        </label>
-
-        <div class="new-app-fields" data-new-app-fields hidden>
-          <label>
-            App 顯示名稱
-            <input name="appName" type="text" placeholder="未填會使用 APK 內建名稱">
-          </label>
-          <label>
-            分類
-            <input name="category" type="text" placeholder="例如 影音播放、導航工具">
-          </label>
-          <label class="wide-field">
-            App 介紹
-            <textarea name="description" rows="3" placeholder="未填會使用預設介紹"></textarea>
-          </label>
-          <label>
-            圖標網址
-            <input name="iconUrl" type="url" inputmode="url" placeholder="可留空使用預設圖標">
-          </label>
-          <label>
-            詳情圖片網址
-            <input name="imageUrl" type="url" inputmode="url" placeholder="可留空使用預設圖片">
-          </label>
-          <label class="wide-field">
-            更新說明
-            <textarea name="changelog" rows="3" placeholder="一行一條，未填會自動產生"></textarea>
-          </label>
-        </div>
-
-        <section class="icon-uploader" aria-label="圖標更換">
-          <div class="icon-preview-wrap">
-            <img data-icon-preview src="../assets/app-logo.png" alt="">
-          </div>
-          <label class="icon-file-zone">
-            <input name="iconFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-icon-file>
-            <strong data-icon-title>選擇圖標圖片</strong>
-            <span data-icon-meta>替換模式會立即更換既有項目；新增模式會在 APK 新增後自動套用。</span>
-          </label>
-        </section>
-
-        <div class="drop-zone" data-drop-zone>
-          <input name="apkFile" type="file" accept=".apk,application/vnd.android.package-archive" data-apk-file>
-          <strong data-drop-title>選擇 APK 並立即替換</strong>
-          <span data-file-meta>支援拖放 APK；選定後自動開始上傳。</span>
-        </div>
-      </form>
-
-      <div class="progress-wrap" aria-label="上傳進度">
-        <span data-progress-bar></span>
-      </div>
-
-      <section class="result-panel" data-result-panel>
-        <h2>執行結果</h2>
-        <pre data-result-output>等待上傳。</pre>
-      </section>
-    </section>
-
-    <aside class="upload-side" aria-label="更新中心狀態">
-      <div class="side-block">
-        <h2>目前清單</h2>
-        <div class="app-list" data-app-list></div>
-      </div>
-      <div class="side-block">
-        <h2>服務狀態</h2>
-        <dl class="health-list" data-health-list>
-          <div><dt>Release</dt><dd>待檢查</dd></div>
-          <div><dt>Manifest</dt><dd>待檢查</dd></div>
-          <div><dt>Apps Script</dt><dd>待檢查</dd></div>
-        </dl>
-      </div>
-    </aside>
+  <main>
+    <span class="mark">✓</span>
+    <h1>已升級為永久雲端版</h1>
+    <p>舊的一鍵上傳網址會自動帶你前往新站；新站不依賴家中主機，電腦關機也能使用。</p>
+    <a id="go" href="https://shen-yue-update-cloud.netlify.app/">立即前往申悅更新中心</a>
   </main>
-
-  <script src="app.js"></script>
+  <script>
+    const target = new URL("https://shen-yue-update-cloud.netlify.app/");
+    const source = new URL(location.href);
+    const key = source.searchParams.get("key") || source.searchParams.get("k");
+    if (key) target.searchParams.set("key", key);
+    document.querySelector("#go").href = target.href;
+    setTimeout(() => location.replace(target.href), 900);
+  </script>
 </body>
 </html>
