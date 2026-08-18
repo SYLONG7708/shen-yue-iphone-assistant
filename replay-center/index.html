@@ -299,7 +299,7 @@
 
       .native-video-item {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: auto minmax(0, 1fr) auto;
         gap: 10px;
         align-items: center;
         width: 100%;
@@ -315,6 +315,62 @@
         margin-top: 4px;
         color: #8ea19a;
         word-break: break-all;
+      }
+
+      .native-video-order {
+        min-width: 66px;
+        border-radius: 999px;
+        padding: 6px 9px;
+        color: #06120e;
+        background: linear-gradient(135deg, #a8d45d, #28c49a);
+        font-size: 12px;
+        font-weight: 900;
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      .replay-preview-panel {
+        transition: inset .2s ease, border-radius .2s ease;
+      }
+
+      .replay-preview-panel:fullscreen,
+      .replay-preview-panel.is-expanded {
+        position: fixed;
+        z-index: 2000;
+        inset: 0;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        margin: 0;
+        border-radius: 0;
+        background: #030506;
+      }
+
+      .replay-preview-panel:fullscreen video,
+      .replay-preview-panel.is-expanded video {
+        max-height: none;
+      }
+
+      .replay-preview-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-left: auto;
+      }
+
+      .replay-preview-actions button,
+      .quality-badge {
+        min-height: 38px;
+        padding: 8px 10px;
+      }
+
+      .quality-badge {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid rgba(168, 212, 93, 0.26);
+        border-radius: 999px;
+        color: #cce9dc;
+        font-size: 12px;
+        font-weight: 900;
       }
 
       .hidden {
@@ -411,6 +467,10 @@
         max-height: 430px;
         object-fit: contain;
         background: #000;
+      }
+
+      video.is-fill {
+        object-fit: cover;
       }
 
       .empty-preview {
@@ -581,7 +641,7 @@
             <input class="hidden" id="fileInput" type="file" accept="video/*,.mp4,.m4v,.mov,.mkv,.webm,.ts,.mts,.m2ts" />
             <div class="native-video-tools hidden" id="nativeVideoTools">
               <div class="native-video-row">
-                <button id="nativeScanButton" type="button">完整掃描 USB1 / USB2 / USB3</button>
+                <button id="nativeScanButton" type="button">重新自動偵測最新影片</button>
                 <button id="nativePermissionButton" type="button">允許讀取影片</button>
               </div>
               <div class="native-video-list" id="nativeVideoList"></div>
@@ -616,9 +676,21 @@
             </div>
             <div class="result-box" id="resultBox">尚未產生連結</div>
           </div>
-          <div class="hidden" aria-hidden="true">
-            <video id="previewVideo" class="hidden" controls playsinline></video>
-            <div class="empty-preview" id="emptyPreview"></div>
+          <div class="panel replay-preview-panel hidden" id="previewPanel">
+            <div class="panel-title">
+              <div class="step-icon">PLAY</div>
+              <h2>回放預覽</h2>
+              <div class="replay-preview-actions">
+                <span class="quality-badge">原始畫質</span>
+                <button id="previewFitButton" type="button">畫面：完整</button>
+                <button id="previewShrinkButton" type="button" disabled>縮小</button>
+                <button id="previewExpandButton" type="button">放大</button>
+              </div>
+            </div>
+            <div class="video-frame">
+              <video id="previewVideo" class="hidden" controls playsinline preload="metadata"></video>
+              <div class="empty-preview" id="emptyPreview">選擇影片後可直接播放與檢查原始畫質</div>
+            </div>
           </div>
         </aside>
       </div>

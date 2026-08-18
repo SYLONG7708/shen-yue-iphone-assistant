@@ -13,10 +13,10 @@ import java.util.Locale;
 import java.util.Set;
 
 final class EvergreenConfig {
-    static final int BRIDGE_VERSION = 2;
+    static final int BRIDGE_VERSION = 3;
     static final int CONFIG_SCHEMA = 1;
     static final int ABSOLUTE_MAX_SCAN_LIMIT = 250000;
-    static final String DEFAULT_REVISION = "builtin-1.0.36";
+    static final String DEFAULT_REVISION = "builtin-1.0.37-usb-latest";
 
     final String revision;
     final boolean scanRawFiles;
@@ -97,12 +97,14 @@ final class EvergreenConfig {
                 ".mp4", ".m4v", ".mov", ".ts", ".mts", ".m2ts",
                 ".avi", ".mkv", ".webm", ".3gp", ".3g2", ".3gpp", ".3gpp2",
                 ".dav", ".264", ".h264", ".hevc", ".h265", ".insv", ".lrv",
-                ".vob", ".mpg", ".mpeg", ".asf", ".wmv", ".flv", ".f4v", ".ogv"
+                ".vob", ".mpg", ".mpeg", ".asf", ".wmv", ".flv", ".f4v", ".ogv",
+                ".rm", ".rmvb", ".mxf", ".mod", ".tod", ".m1v", ".m2v", ".mpe", ".mpv", ".qt"
         ));
         LinkedHashSet<String> defaultRemuxExtensions = new LinkedHashSet<>(Arrays.asList(
                 ".mov", ".ts", ".mts", ".m2ts", ".avi", ".mkv", ".webm", ".3gp", ".3g2",
                 ".3gpp", ".3gpp2", ".dav", ".264", ".h264", ".hevc", ".h265", ".insv",
-                ".lrv", ".vob", ".mpg", ".mpeg", ".asf", ".wmv", ".flv", ".f4v", ".ogv"
+                ".lrv", ".vob", ".mpg", ".mpeg", ".asf", ".wmv", ".flv", ".f4v", ".ogv",
+                ".rm", ".rmvb", ".mxf", ".mod", ".tod", ".m1v", ".m2v", ".mpe", ".mpv", ".qt"
         ));
         List<SourceRule> rules = Arrays.asList(
                 new SourceRule("/usb3/", "USB3"),

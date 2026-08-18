@@ -1,4 +1,4 @@
-const CACHE_NAME = 'replay-center-v27-unified-video-qr'
+const CACHE_NAME = 'replay-center-v28-usb-auto-latest'
 const STATIC_ASSETS = ['./', './index.html', './compat-app.js', '../native-bridge.js', './remote-config.json', './native-config.json', './manifest.webmanifest', './favicon.svg']
 
 self.addEventListener('install', (event) => {

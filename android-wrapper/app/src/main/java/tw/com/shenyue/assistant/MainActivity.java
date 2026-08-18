@@ -14,10 +14,13 @@ import android.webkit.ServiceWorkerController;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
+
+import androidx.webkit.WebViewAssetLoader;
 
 import org.json.JSONObject;
 
@@ -28,6 +31,7 @@ import java.util.LinkedHashSet;
 public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST_CODE = 7708;
     private static final String NATIVE_SESSION_STATE = "shen_yue_native_session";
+    private static final String LOCAL_APP_URL = "https://appassets.androidplatform.net/assets/www/index.html";
     private WebView webView;
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
@@ -70,6 +74,13 @@ public class MainActivity extends Activity {
         }
         settings.setUserAgentString(settings.getUserAgentString() + " ShenYueAndroidApk/" + BuildConfig.VERSION_NAME);
 
+        final boolean usesBundledWebAssets = BuildConfig.HOME_URL.startsWith("file://");
+        final WebViewAssetLoader assetLoader = usesBundledWebAssets
+                ? new WebViewAssetLoader.Builder()
+                        .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                        .build()
+                : null;
+
         if (BuildConfig.HOME_URL.startsWith("https://")) {
             configureLiveCloudLoading(settings);
             settings.setAllowFileAccess(false);
@@ -79,6 +90,13 @@ public class MainActivity extends Activity {
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+            }
+        } else if (usesBundledWebAssets) {
+            settings.setAllowFileAccess(false);
+            settings.setAllowContentAccess(false);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                settings.setAllowFileAccessFromFileURLs(false);
+                settings.setAllowUniversalAccessFromFileURLs(false);
             }
         }
 
@@ -133,6 +151,15 @@ public class MainActivity extends Activity {
         });
 
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (assetLoader != null && request != null) {
+                    WebResourceResponse response = assetLoader.shouldInterceptRequest(request.getUrl());
+                    if (response != null) return response;
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (request != null && !request.isForMainFrame()) return false;
@@ -272,7 +299,7 @@ public class MainActivity extends Activity {
             webView.loadUrl(withNativeSession(withCacheBuster(BuildConfig.HOME_URL)));
             return;
         }
-        webView.loadUrl(withNativeSession(BuildConfig.HOME_URL));
+        webView.loadUrl(withNativeSession(LOCAL_APP_URL));
     }
 
     private String withNativeSession(String url) {
@@ -375,6 +402,10 @@ public class MainActivity extends Activity {
                 return path.startsWith("/android_asset/www/") || path.equals("/android_asset/www/index.html");
             }
             if (!"https".equalsIgnoreCase(uri.getScheme())) return false;
+            if ("appassets.androidplatform.net".equalsIgnoreCase(uri.getHost())) {
+                String path = uri.getPath() == null ? "" : uri.getPath();
+                return path.equals("/assets/www/index.html") || path.startsWith("/assets/www/");
+            }
             if (!"sylong7708.github.io".equalsIgnoreCase(uri.getHost())) return false;
             String path = uri.getPath() == null ? "" : uri.getPath();
             return path.equals("/shen-yue-iphone-assistant") || path.startsWith("/shen-yue-iphone-assistant/");
@@ -406,7 +437,8 @@ public class MainActivity extends Activity {
                 + "if(typeof Proxy==='function'){window.ShenYueUpdater=new Proxy({}, {get:(_,name)=>name==='then'?undefined:call(String(name))});}"
                 + "else{" + methods + ".forEach((name)=>{(window.ShenYueUpdater||(window.ShenYueUpdater={}))[name]=call(name);});}"
                 + "}"
-                + "window.dispatchEvent(new CustomEvent('shenYueNativeReady',{detail:{bridgeVersion:2}}));"
+                + "window.dispatchEvent(new CustomEvent('shenYueNativeReady',{detail:{bridgeVersion:"
+                + EvergreenConfig.BRIDGE_VERSION + "}}));"
                 + "}catch(error){}})();";
     }
 

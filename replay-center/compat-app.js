@@ -15,7 +15,15 @@
   var nativeVideoSourceFilter = ''
   var nativeConfigSettled = !window.ShenYueNativeConfigReady
   var nativeConfigWaitQueued = false
+  var nativeAccessGranted = false
+  var nativeScanRunning = false
+  var nativeAutoScanTimer = 0
+  var lastNativeScanCompletedAt = 0
   var NATIVE_VIDEO_PAGE_SIZE = 200
+  var NATIVE_AUTO_RESCAN_INTERVAL_MS = 15000
+  var nativeSequenceCollator = typeof Intl !== 'undefined' && Intl.Collator
+    ? new Intl.Collator('zh-Hant', { numeric: true, sensitivity: 'base' })
+    : null
 
   var defaults = {
     endpoint: '',
@@ -49,6 +57,10 @@
     resetButton: byId('resetButton'),
     previewVideo: byId('previewVideo'),
     emptyPreview: byId('emptyPreview'),
+    previewPanel: byId('previewPanel'),
+    previewFitButton: byId('previewFitButton'),
+    previewExpandButton: byId('previewExpandButton'),
+    previewShrinkButton: byId('previewShrinkButton'),
     qrWrap: byId('qrWrap'),
     openWatchButton: byId('openWatchButton'),
     copyWatchButton: byId('copyWatchButton'),
@@ -141,7 +153,7 @@
     el.pickButton.addEventListener('click', function () {
       el.fileInput.click()
     })
-    el.nativeScanButton.addEventListener('click', scanNativeVideos)
+    el.nativeScanButton.addEventListener('click', function () { scanNativeVideos(false) })
     el.nativePermissionButton.addEventListener('click', requestNativeVideoAccess)
     el.fileInput.addEventListener('change', function () {
       handleFile(el.fileInput.files && el.fileInput.files[0])
@@ -149,6 +161,9 @@
     el.uploadButton.addEventListener('click', uploadAndCreateShare)
     el.shareButton.addEventListener('click', shareCurrentLink)
     el.resetButton.addEventListener('click', resetFile)
+    if (el.previewFitButton) el.previewFitButton.addEventListener('click', toggleReplayPreviewFit)
+    if (el.previewExpandButton) el.previewExpandButton.addEventListener('click', expandReplayPreview)
+    if (el.previewShrinkButton) el.previewShrinkButton.addEventListener('click', shrinkReplayPreview)
     el.copyWatchButton.addEventListener('click', function () {
       copyText(lastWatchUrl)
     })
@@ -160,6 +175,7 @@
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden) refreshNativeAccessState()
     })
+    document.addEventListener('fullscreenchange', syncReplayPreviewSizeControls)
   }
 
   function readSettings() {
@@ -319,12 +335,59 @@
     el.previewVideo.src = uri
     el.previewVideo.className = ''
     el.emptyPreview.className = 'hidden'
+    if (el.previewPanel) el.previewPanel.classList.remove('hidden')
+    if (typeof el.previewVideo.load === 'function') el.previewVideo.load()
+    syncReplayPreviewSizeControls()
   }
 
   function hideNativePreview() {
+    if (typeof el.previewVideo.pause === 'function') el.previewVideo.pause()
     el.previewVideo.removeAttribute('src')
     el.previewVideo.className = 'hidden'
     el.emptyPreview.className = 'empty-preview'
+    if (typeof el.previewVideo.load === 'function') el.previewVideo.load()
+    if (el.previewPanel) el.previewPanel.classList.add('hidden')
+    shrinkReplayPreview()
+  }
+
+  function toggleReplayPreviewFit() {
+    var fill = !el.previewVideo.classList.contains('is-fill')
+    el.previewVideo.classList.toggle('is-fill', fill)
+    if (el.previewFitButton) el.previewFitButton.textContent = fill ? '畫面：填滿' : '畫面：完整'
+  }
+
+  function expandReplayPreview() {
+    if (!el.previewPanel) return
+    var request = el.previewPanel.requestFullscreen || el.previewPanel.webkitRequestFullscreen
+    if (request) {
+      try {
+        var result = request.call(el.previewPanel)
+        if (result && typeof result.catch === 'function') result.catch(function () {
+          el.previewPanel.classList.add('is-expanded')
+          syncReplayPreviewSizeControls()
+        })
+      } catch (error) {
+        el.previewPanel.classList.add('is-expanded')
+      }
+    } else {
+      el.previewPanel.classList.add('is-expanded')
+    }
+    syncReplayPreviewSizeControls()
+  }
+
+  function shrinkReplayPreview() {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      var result = document.exitFullscreen()
+      if (result && typeof result.catch === 'function') result.catch(function () {})
+    }
+    if (el.previewPanel) el.previewPanel.classList.remove('is-expanded')
+    syncReplayPreviewSizeControls()
+  }
+
+  function syncReplayPreviewSizeControls() {
+    var expanded = Boolean(document.fullscreenElement || (el.previewPanel && el.previewPanel.classList.contains('is-expanded')))
+    if (el.previewExpandButton) el.previewExpandButton.disabled = expanded
+    if (el.previewShrinkButton) el.previewShrinkButton.disabled = !expanded
   }
 
   function refreshNativeAccessState() {
@@ -335,11 +398,32 @@
       return
     }
     if (state.readVideoGranted || state.allFilesGranted) {
+      var newlyGranted = !nativeAccessGranted
+      nativeAccessGranted = true
       el.nativePermissionButton.innerHTML = state.allFilesGranted ? '已可讀取所有檔案' : '已可讀取影片'
-      el.nativeVideoList.innerHTML = '<div class="result-box">完整掃描 USB1、USB2、USB3、動態可移除磁碟、環景、DVR/Record 與 MediaStore；支援 MP4、TS、MOV、AVI、MKV、WebM、DAV、H264/H265。</div>'
+      if (!nativeScanRunning && !nativeVideoItems.length) {
+        el.nativeVideoList.innerHTML = '<div class="result-box">已授權；將自動掃描 USB1、USB2、USB3、動態可移除磁碟、環景、DVR/Record 與 MediaStore，並把最新日期／序號排在最前。</div>'
+      }
+      if (newlyGranted || !lastNativeScanCompletedAt || Date.now() - lastNativeScanCompletedAt >= NATIVE_AUTO_RESCAN_INTERVAL_MS) {
+        scheduleAutomaticNativeScan(newlyGranted ? 180 : 600)
+      }
       return
     }
+    nativeAccessGranted = false
     el.nativeVideoList.innerHTML = '<div class="result-box">車機尚未授權讀取 USB 影片，請先按「允許讀取影片」。</div>'
+  }
+
+  function scheduleAutomaticNativeScan(delay) {
+    if (!nativeAccessGranted || nativeScanRunning || nativeAutoScanTimer || !hasNativeVideoBridge()) return
+    nativeAutoScanTimer = window.setTimeout(function () {
+      nativeAutoScanTimer = 0
+      scanNativeVideos(true)
+    }, Math.max(0, delay || 0))
+  }
+
+  function finishNativeScan() {
+    nativeScanRunning = false
+    lastNativeScanCompletedAt = Date.now()
   }
 
   function requestNativeVideoAccess() {
@@ -349,7 +433,7 @@
     window.setTimeout(refreshNativeAccessState, 800)
   }
 
-  function scanNativeVideos() {
+  function scanNativeVideos(automatic) {
     if (!nativeConfigSettled && window.ShenYueNativeConfigReady && typeof window.ShenYueNativeConfigReady.then === 'function') {
       setStatus('busy', '正在同步 GitHub 常青掃描規則...')
       if (!nativeConfigWaitQueued) {
@@ -357,7 +441,7 @@
         window.ShenYueNativeConfigReady.then(function () {
           nativeConfigSettled = true
           nativeConfigWaitQueued = false
-          scanNativeVideos()
+          scanNativeVideos(Boolean(automatic))
         })
       }
       return
@@ -366,6 +450,8 @@
       setStatus('error', '目前不是 Android APK 車機模式，請使用上方選檔。')
       return
     }
+    if (nativeScanRunning) return
+    nativeScanRunning = true
     setStatus('busy', '正在完整掃描 USB1、USB2、USB3、環景與車機影片。')
     el.nativeVideoList.innerHTML = '<div class="result-box">掃描中...</div>'
     clearScanPoll()
@@ -380,6 +466,7 @@
     window.setTimeout(function () {
       var result = parseNativeResult(window.ShenYueUpdater.listLocalVideos())
       if (!result.ok) {
+        finishNativeScan()
         el.nativeVideoList.innerHTML = '<div class="result-box">' + escapeHtml(result.message || '掃描失敗') + '</div>'
         setStatus('error', escapeHtml(result.message || '掃描失敗'))
         return
@@ -392,6 +479,7 @@
     var state = parseNativeResult(window.ShenYueUpdater.getLocalVideoScanStatus(taskId))
     if (!state.ok) {
       clearScanPoll()
+      finishNativeScan()
       setProgress(0, false)
       el.nativeVideoList.innerHTML = '<div class="result-box">' + escapeHtml(state.message || '掃描失敗') + '</div>'
       setStatus('error', escapeHtml(state.message || '掃描失敗'))
@@ -402,11 +490,13 @@
     setStatus(state.status === 'failed' ? 'error' : 'busy', escapeHtml(state.message || '正在掃描環景/USB/車機影片...'))
     if (state.status === 'done') {
       clearScanPoll()
+      finishNativeScan()
       renderNativeVideos(state.items || [], state.scanRoots || [], state.scanTruncated, state.scanLimit)
       return
     }
     if (state.status === 'failed') {
       clearScanPoll()
+      finishNativeScan()
       el.nativeVideoList.innerHTML = '<div class="result-box">' + escapeHtml(state.message || '掃描失敗') + '</div>'
       setProgress(0, false)
       return
@@ -427,10 +517,14 @@
       return
     }
     nativeVideoItems = items.slice().sort(function (left, right) {
-      var modified = Number(right.modified || 0) - Number(left.modified || 0)
+      var modified = Number(right.sortTime || right.modified || 0) - Number(left.sortTime || left.modified || 0)
       if (modified) return modified
-      return String(left.name || '').localeCompare(String(right.name || ''), 'zh-Hant')
+      if (nativeSequenceCollator) return nativeSequenceCollator.compare(String(right.name || ''), String(left.name || ''))
+      return String(right.name || '').localeCompare(String(left.name || ''), 'zh-Hant')
     })
+    for (var orderIndex = 0; orderIndex < nativeVideoItems.length; orderIndex += 1) {
+      nativeVideoItems[orderIndex]._sequenceNumber = orderIndex + 1
+    }
     nativeVideoVisibleCount = NATIVE_VIDEO_PAGE_SIZE
     renderNativeVideoBrowser(scanRoots || [])
     var suffix = scanTruncated ? '；已達掃描上限 ' + (scanLimit || items.length) + ' 筆，請分批整理資料夾。' : '。'
@@ -445,7 +539,7 @@
     var summary = document.createElement('div')
     summary.className = 'result-box native-video-summary'
     var roots = Array.isArray(scanRoots) ? scanRoots : []
-    summary.textContent = '完整讀取 ' + nativeVideoItems.length + ' 個影片' + (roots.length ? '；已檢查 ' + roots.length + ' 個掃描根目錄。' : '。')
+    summary.textContent = '自動偵測 ' + nativeVideoItems.length + ' 個影片；已依日期與自然序號由新到舊排列' + (roots.length ? '，檢查 ' + roots.length + ' 個掃描根目錄。' : '。')
 
     var filters = document.createElement('div')
     filters.className = 'native-video-filters'
@@ -509,7 +603,7 @@
       list.innerHTML = ''
       var fragment = document.createDocumentFragment()
       for (var index = 0; index < visible.length; index += 1) {
-        fragment.appendChild(createNativeVideoItem(visible[index]))
+        fragment.appendChild(createNativeVideoItem(visible[index], index))
       }
       list.appendChild(fragment)
       count.textContent = '符合 ' + filtered.length + ' 個；目前顯示 ' + visible.length + ' 個。'
@@ -534,17 +628,20 @@
     paint(false)
   }
 
-  function createNativeVideoItem(item) {
+  function createNativeVideoItem(item, position) {
     var button = document.createElement('button')
     button.type = 'button'
     button.className = 'native-video-item'
     var path = item.path ? '<small>' + escapeHtml(item.path) + '</small>' : ''
+    var sequenceNumber = Number(item._sequenceNumber || position + 1)
+    var orderLabel = sequenceNumber === 1 ? '最新 #01' : '#' + String(sequenceNumber).padStart(2, '0')
+    var orderedAt = formatVideoOrderTime(item.sortTime || item.modified, item.sortBasis)
     button.innerHTML =
-      '<span><strong>' +
+      '<span class="native-video-order">' + escapeHtml(orderLabel) + '</span><span><strong>' +
       escapeHtml(item.name || 'replay-video.mp4') +
       '</strong>' +
       path +
-      '</span><small>' +
+      '</span><small>' + (orderedAt ? escapeHtml(orderedAt) + ' / ' : '') +
       escapeHtml(formatBytes(item.size || 0)) +
       ' / ' +
       escapeHtml(item.source || 'video') +
@@ -553,6 +650,18 @@
       selectNativeVideo(item)
     })
     return button
+  }
+
+  function formatVideoOrderTime(value, basis) {
+    var timestamp = Number(value || 0)
+    if (!timestamp) return ''
+    try {
+      var options = { hour12: false }
+      if (basis === 'filename-time') options.timeZone = 'UTC'
+      return new Date(timestamp).toLocaleString('zh-TW', options)
+    } catch (error) {
+      return ''
+    }
   }
 
   function selectNativeVideo(item) {
@@ -721,9 +830,7 @@
 
     if (selectedObjectUrl) URL.revokeObjectURL(selectedObjectUrl)
     selectedObjectUrl = URL.createObjectURL(file)
-    el.previewVideo.src = selectedObjectUrl
-    el.previewVideo.className = ''
-    el.emptyPreview.className = 'hidden'
+    showNativePreview(selectedObjectUrl)
     setProgress(4)
     setStatus('busy', '影片已加入清單，正在上傳並產生 QR。')
     autoUploadTimer = window.setTimeout(function () {
@@ -745,9 +852,7 @@
     el.fileInput.value = ''
     el.fileName.innerHTML = ''
     el.fileMeta.innerHTML = ''
-    el.previewVideo.removeAttribute('src')
-    el.previewVideo.className = 'hidden'
-    el.emptyPreview.className = 'empty-preview'
+    hideNativePreview()
     el.uploadButton.disabled = true
     el.shareButton.disabled = true
     setProgress(0)
@@ -863,6 +968,8 @@
     var watchUrl = localWatchUrl || result.cloudWatchUrl
     var downloadUrl = result.downloadUrl || ''
     var originalUrl = result.originalUrl || ''
+    var videoUrl = result.videoUrl || downloadUrl || originalUrl
+    if (videoUrl) showNativePreview(videoUrl)
     showShare(
       {
         watchUrl: watchUrl,

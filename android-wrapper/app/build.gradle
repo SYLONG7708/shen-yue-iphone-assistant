@@ -42,12 +42,21 @@ android {
     namespace "tw.com.shenyue.assistant"
     compileSdk 36
 
+    signingConfigs {
+        debug {
+            enableV1Signing true
+            enableV2Signing true
+            enableV3Signing true
+            enableV4Signing false
+        }
+    }
+
     defaultConfig {
         applicationId "tw.com.shenyue.assistant"
         minSdk 23
         targetSdk 36
-        versionCode 136
-        versionName "1.0.36"
+        versionCode 137
+        versionName "1.0.37"
     }
 
     flavorDimensions "content"
@@ -142,7 +151,9 @@ android {
 }
 
 dependencies {
+    implementation "androidx.webkit:webkit:1.15.0"
     implementation "com.google.zxing:core:3.5.4"
+    testImplementation "junit:junit:4.13.2"
 }
 
 tasks.withType(JavaCompile).configureEach {
