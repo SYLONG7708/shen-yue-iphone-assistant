@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "minimumBridgeVersion": 2,
-  "revision": "2026-07-11-unified-browser-qr-1.0.36",
-  "updatedAt": "2026-07-11T15:17:25+08:00",
+  "minimumBridgeVersion": 3,
+  "revision": "2026-08-18-usb-auto-latest-sequence-1.0.37",
+  "updatedAt": "2026-08-18T11:30:00+08:00",
   "scan": {
     "rawFiles": true,
     "mediaStore": true,
@@ -64,7 +64,8 @@
     "extensions": [
       ".mp4", ".m4v", ".mov", ".ts", ".mts", ".m2ts", ".avi", ".mkv", ".webm",
       ".3gp", ".3g2", ".3gpp", ".3gpp2", ".dav", ".264", ".h264", ".hevc", ".h265",
-      ".insv", ".lrv", ".vob", ".mpg", ".mpeg", ".asf", ".wmv", ".flv", ".f4v", ".ogv"
+      ".insv", ".lrv", ".vob", ".mpg", ".mpeg", ".asf", ".wmv", ".flv", ".f4v", ".ogv",
+      ".rm", ".rmvb", ".mxf", ".mod", ".tod", ".m1v", ".m2v", ".mpe", ".mpv", ".qt"
     ],
     "ignoredDirectoryNames": [
       "System Volume Information",
@@ -105,7 +106,8 @@
     "remuxExtensions": [
       ".mov", ".ts", ".mts", ".m2ts", ".avi", ".mkv", ".webm", ".3gp", ".3g2",
       ".3gpp", ".3gpp2", ".dav", ".264", ".h264", ".hevc", ".h265", ".insv",
-      ".lrv", ".vob", ".mpg", ".mpeg", ".asf", ".wmv", ".flv", ".f4v", ".ogv"
+      ".lrv", ".vob", ".mpg", ".mpeg", ".asf", ".wmv", ".flv", ".f4v", ".ogv",
+      ".rm", ".rmvb", ".mxf", ".mod", ".tod", ".m1v", ".m2v", ".mpe", ".mpv", ".qt"
     ]
   },
   "sharing": {

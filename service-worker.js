@@ -1,4 +1,4 @@
-const cacheName = "shen-yue-assistant-v257-unified-video-qr";
+const cacheName = "shen-yue-assistant-v258-usb-latest-tutorials";
 const assets = [
   "./",
   "./index.html",

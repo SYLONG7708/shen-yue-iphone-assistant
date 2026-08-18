@@ -493,6 +493,18 @@ html.android-apk .tab-bar button.active {
   margin-bottom: 18px;
 }
 
+.tutorial-classification-note {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(133, 206, 255, 0.22);
+  border-radius: 8px;
+  color: #cfe8f8;
+  background: rgba(31, 120, 171, 0.12);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.55;
+}
+
 .video-tools input,
 .record-form input,
 .record-form select,
@@ -625,6 +637,25 @@ html.android-apk .tab-bar button.active {
   color: var(--muted);
 }
 
+.video-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.video-card-tags span {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  border: 1px solid rgba(133, 206, 255, 0.2);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: #d9effd;
+  background: rgba(133, 206, 255, 0.08);
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .video-body a,
 .video-body button,
 .contact-links a {
@@ -735,6 +766,11 @@ body.video-modal-open {
   font: inherit;
   font-weight: 900;
   cursor: pointer;
+}
+
+.video-modal-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
 }
 
 .video-modal-content {

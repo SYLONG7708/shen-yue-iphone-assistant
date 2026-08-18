@@ -498,7 +498,7 @@ public class UpdateBridge {
             result.put("unreadableDirectories", scanState.unreadableDirectories);
             result.put("scanRoots", scanRoots);
             result.put("scanPaths", "GitHub 常青設定 " + config.revision + "；USB1/USB2/USB3 + 動態可移除磁碟 + MediaStore；"
-                    + config.extensions.size() + " 種影片格式");
+                    + config.extensions.size() + " 種影片格式；檔名日期/自然序號最新優先");
             result.put("configRevision", config.revision);
             result.put("nativeBridgeVersion", EvergreenConfig.BRIDGE_VERSION);
         } catch (Exception error) {
@@ -1082,6 +1082,8 @@ public class UpdateBridge {
         columns.add(MediaStore.Video.Media.DISPLAY_NAME);
         columns.add(MediaStore.Video.Media.SIZE);
         columns.add(MediaStore.Video.Media.DATE_MODIFIED);
+        columns.add(MediaStore.Video.Media.DATE_ADDED);
+        columns.add(MediaStore.Video.Media.DATE_TAKEN);
         columns.add(MediaStore.Video.Media.MIME_TYPE);
         columns.add(MediaStore.Video.Media.DURATION);
         columns.add(MediaStore.Video.Media.DATA);
@@ -1121,11 +1123,18 @@ public class UpdateBridge {
                 String pathForFilter = absolutePath + " " + relativePath + " " + uriValue;
                 if (!isLikelyVideoName(name, config)) continue;
                 scanState.files += 1;
+                long dateModified = getCursorLong(cursor, MediaStore.Video.Media.DATE_MODIFIED, 0L) * 1000L;
+                long dateAdded = getCursorLong(cursor, MediaStore.Video.Media.DATE_ADDED, 0L) * 1000L;
+                long dateTaken = getCursorLong(cursor, MediaStore.Video.Media.DATE_TAKEN, 0L);
+                long storageTimestamp = Math.max(dateModified, Math.max(dateAdded, dateTaken));
+                long sortTimestamp = VideoOrder.sortTimestamp(name, absolutePath + " " + relativePath, storageTimestamp);
                 item.put("id", "media-" + Math.abs(uriValue.hashCode()));
                 item.put("uri", uriValue);
                 item.put("name", name);
                 item.put("size", getCursorLong(cursor, MediaStore.Video.Media.SIZE, 0L));
-                item.put("modified", getCursorLong(cursor, MediaStore.Video.Media.DATE_MODIFIED, 0L) * 1000L);
+                item.put("modified", storageTimestamp);
+                item.put("sortTime", sortTimestamp);
+                item.put("sortBasis", VideoOrder.sortBasis(name, absolutePath + " " + relativePath, storageTimestamp));
                 item.put("duration", getCursorLong(cursor, MediaStore.Video.Media.DURATION, 0L));
                 item.put("mimeType", getCursorString(cursor, MediaStore.Video.Media.MIME_TYPE, guessVideoMime(name)));
                 item.put("path", relativePath);
@@ -1416,7 +1425,10 @@ public class UpdateBridge {
                         item.put("uri", uri);
                         item.put("name", child.getName());
                         item.put("size", child.length());
-                        item.put("modified", child.lastModified());
+                        long storageTimestamp = child.lastModified();
+                        item.put("modified", storageTimestamp);
+                        item.put("sortTime", VideoOrder.sortTimestamp(child.getName(), child.getParent(), storageTimestamp));
+                        item.put("sortBasis", VideoOrder.sortBasis(child.getName(), child.getParent(), storageTimestamp));
                         item.put("duration", 0);
                         item.put("mimeType", guessVideoMime(child.getName()));
                         item.put("path", child.getParent());
@@ -1453,11 +1465,14 @@ public class UpdateBridge {
             JSONObject item = items.optJSONObject(index);
             if (item != null) values.add(item);
         }
-        Collections.sort(values, (left, right) -> {
-            int modified = Long.compare(right.optLong("modified", 0L), left.optLong("modified", 0L));
-            if (modified != 0) return modified;
-            return left.optString("name", "").compareToIgnoreCase(right.optString("name", ""));
-        });
+        Collections.sort(values, (left, right) -> VideoOrder.compareNewestFirst(
+                left.optLong("sortTime", left.optLong("modified", 0L)),
+                left.optString("name", ""),
+                left.optString("path", ""),
+                right.optLong("sortTime", right.optLong("modified", 0L)),
+                right.optString("name", ""),
+                right.optString("path", "")
+        ));
         JSONArray sorted = new JSONArray();
         for (JSONObject value : values) sorted.put(value);
         return sorted;
@@ -2494,6 +2509,11 @@ public class UpdateBridge {
         if (value.endsWith(".wmv") || value.endsWith(".asf")) return "video/x-ms-wmv";
         if (value.endsWith(".flv") || value.endsWith(".f4v")) return "video/x-flv";
         if (value.endsWith(".ogv")) return "video/ogg";
+        if (value.endsWith(".rm") || value.endsWith(".rmvb")) return "application/vnd.rn-realmedia";
+        if (value.endsWith(".mxf")) return "application/mxf";
+        if (value.endsWith(".mod") || value.endsWith(".tod")) return "video/mpeg";
+        if (value.endsWith(".m1v") || value.endsWith(".m2v") || value.endsWith(".mpe") || value.endsWith(".mpv")) return "video/mpeg";
+        if (value.endsWith(".qt")) return "video/quicktime";
         if (value.endsWith(".insv") || value.endsWith(".lrv")) return "application/octet-stream";
         if (value.endsWith(".ts") || value.endsWith(".mts") || value.endsWith(".m2ts")) return "video/mp2t";
         if (value.endsWith(".3gp") || value.endsWith(".3gpp")) return "video/3gpp";

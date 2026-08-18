@@ -81,6 +81,7 @@ const warrantyModelOptions = [
 const warrantyModelSet = new Set(warrantyModelOptions);
 let deferredInstallPrompt = null;
 let activeVideoCategory = "all";
+let preferredTutorialQuality = localStorage.getItem("shen-yue-tutorial-quality") === "hd1080" ? "hd1080" : "auto";
 let lastRemoteContentCheck = 0;
 let updateCenterLoaded = false;
 let currentUpdateItems = [];
@@ -107,40 +108,161 @@ const defaultContent = {
 const surroundTutorialPlaylistTitle = "環景教學播放清單";
 const surroundTutorialPlaylistKey = "surround-view";
 const surroundTutorialVideos = [
-  { title: "該如何下載環景影像｜主機調閱｜電腦存放", category: "設定", url: "https://youtu.be/1SUlHDdkxPM", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle },
-  { title: "該如何知道環景是否有在錄製｜真的很重要", category: "設定", url: "https://youtu.be/h-BnxenbwyQ", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle },
-  { title: "教你如何更改環景車型｜顏色｜車牌號碼", category: "設定", url: "https://youtu.be/XW1fcxNh1xo", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle },
-  { title: "環景設定倒車軌跡樣式", category: "設定", url: "https://youtu.be/S6tRHKrkIVE", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle },
-  { title: "教你如何主機直接格式化環景記憶卡", category: "設定", url: "https://youtu.be/UDWqB1Di_RU", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle },
-  { title: "環景原車設置大全－基本功教學", category: "設定", url: "https://youtu.be/vcUqtftG2Uc", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle }
+  { title: "該如何下載環景影像｜主機調閱｜電腦存放", category: "設定", url: "https://youtu.be/1SUlHDdkxPM", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle, groupKey: "surround" },
+  { title: "該如何知道環景是否有在錄製｜真的很重要", category: "設定", url: "https://youtu.be/h-BnxenbwyQ", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle, groupKey: "surround" },
+  { title: "教你如何更改環景車型｜顏色｜車牌號碼", category: "設定", url: "https://youtu.be/XW1fcxNh1xo", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle, groupKey: "surround" },
+  { title: "環景設定倒車軌跡樣式", category: "設定", url: "https://youtu.be/S6tRHKrkIVE", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle, groupKey: "surround" },
+  { title: "教你如何主機直接格式化環景記憶卡", category: "設定", url: "https://youtu.be/UDWqB1Di_RU", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle, groupKey: "surround" },
+  { title: "環景原車設置大全－基本功教學", category: "設定", url: "https://youtu.be/vcUqtftG2Uc", playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle, groupKey: "surround" }
+];
+
+function classifyTutorialCategory(title) {
+  const text = String(title || "");
+  if (/排解|失效|無聲音|沒有聲音|顛倒|重啟|呼大呼小/.test(text)) return "故障排除";
+  if (/CarPlay|Carplay|Android Auto|藍牙|網路/.test(text)) return "連線";
+  if (/導航|神盾|測速/.test(text)) return "導航";
+  if (/播放音樂/.test(text)) return "影音";
+  if (/分屏|按鍵|儀表板|規格介紹/.test(text)) return "介面";
+  return "設定";
+}
+
+function createTutorialGroup({ key, title, groupType, vehicleBrand, unitProfile, items }) {
+  const playlistKey = `tutorial-${key}`;
+  const playlistItems = items.map(([itemTitle, url]) => ({
+    title: itemTitle,
+    category: classifyTutorialCategory(itemTitle),
+    url,
+    playlistKey,
+    playlistTitle: title,
+    groupKey: key,
+    vehicleBrand,
+    unitProfile
+  }));
+  return {
+    title,
+    category: groupType,
+    groupKey: key,
+    groupLabel: title,
+    vehicleBrand,
+    unitProfile,
+    url: playlistItems[0]?.url || "",
+    playlistKey,
+    playlistTitle: title,
+    playlistItems
+  };
+}
+
+const tutorialGroups = [
+  createTutorialGroup({
+    key: "unit-128",
+    title: "八核心 8+128 以下（含 2+64／4+64）",
+    groupType: "主機規格",
+    vehicleBrand: "通用車種",
+    unitProfile: "八核心 8+128 以下",
+    items: [
+      ["八核心8+128以下規格介紹 (包括 2+64 / 4+64）", "https://youtu.be/amdxfellft0"],
+      ["安卓機側邊鍵失效重新學習教學", "https://youtu.be/Y-O2Rm9dMrg"],
+      ["排解改善CarPlay呼大呼小問題", "https://youtu.be/xXRS29eZ1aE"],
+      ["方向盤按鍵失效重新學習教學", "https://youtu.be/vEB67pHhWgA"],
+      ["樂客導航王使用教學（更新圖資）", "https://youtu.be/Gml2cAgDyWs"],
+      ["Android Auto連結教學", "https://youtu.be/O2iUUj3CRBY"],
+      ["Andriod手機藍牙教學", "https://youtu.be/nkp3moLAkrw"],
+      ["Andriod手機分享網路教學", "https://youtu.be/S5CfPqZo570"],
+      ["iPhone連接Apple CarPlay", "https://youtu.be/EZOD04eoK40"],
+      ["iPhone連接藍牙教學", "https://youtu.be/GlVRy9TE-C8"],
+      ["iPhone連接網路教學", "https://youtu.be/ORMxxJ4MWiQ"],
+      ["安卓機分屏模式教學(八核心2+64/4+64/8+128)", "https://youtu.be/Mdp3bdMnb5k"],
+      ["申悅車機助手使用教學", "https://youtu.be/XgzuPOxlpwQ"],
+      ["申悅車機助手(環景錄影回放中心教學）", "https://youtu.be/XgzuPOxlpwQ"],
+      ["安卓機底部按鍵使用教學", "https://youtu.be/b0BRpXv-haM"],
+      ["申悅官方更新站使用教學", "https://youtu.be/CDd5aAsGoe4"],
+      ["神盾操作使用教學 (照相更新）", "https://youtu.be/mG9Woba_46w"],
+      ["安卓機隨身碟播放音樂", "https://youtu.be/UGDWbypj7so"],
+      ["Play商店下載與更新APP", "https://youtu.be/sBAqvvv23rU"],
+      ["倒車顯影變成顛倒重新設定", "https://youtu.be/sL2oFKqVRNY"],
+      ["安卓機秒開教學", "https://youtu.be/P5jIoubuB7Y"],
+      ["APP自動啟動教學", "https://youtu.be/aq6SUYLWJto"]
+    ]
+  }),
+  createTutorialGroup({
+    key: "unit-256",
+    title: "八核心 8+256（含 13 吋安卓機）",
+    groupType: "主機規格",
+    vehicleBrand: "通用車種",
+    unitProfile: "八核心 8+256／13 吋",
+    items: [
+      ["八核心8+256主機-隱藏按鍵(包括13吋安卓機）", "https://youtu.be/gx2qGtV2EFE"],
+      ["如何重啟主機(適用13吋主機）", "https://youtu.be/9dPTepYy7i0"],
+      ["安卓機秒開功能設定(適用8+256主機）", "https://youtu.be/t_haZVz4b8k"],
+      ["自動啟動APP (8+256教學）", "https://youtu.be/_Ee3X9UgCv0"],
+      ["排解改善CarPlay呼大呼小問題", "https://youtu.be/xXRS29eZ1aE"],
+      ["方向盤按鍵失效重新學習教學", "https://youtu.be/vEB67pHhWgA"],
+      ["樂客導航王使用教學（更新圖資）", "https://youtu.be/Gml2cAgDyWs"],
+      ["Android Auto連結教學", "https://youtu.be/O2iUUj3CRBY"],
+      ["Andriod手機藍牙教學", "https://youtu.be/nkp3moLAkrw"],
+      ["Andriod手機分享網路教學", "https://youtu.be/S5CfPqZo570"],
+      ["iPhone連接Apple CarPlay", "https://youtu.be/EZOD04eoK40"],
+      ["iPhone連接藍牙教學", "https://youtu.be/GlVRy9TE-C8"],
+      ["iPhone連接網路教學", "https://youtu.be/ORMxxJ4MWiQ"],
+      ["申悅車機助手使用教學", "https://youtu.be/XgzuPOxlpwQ"],
+      ["申悅車機助手(環景錄影回放中心教學）", "https://youtu.be/XgzuPOxlpwQ"],
+      ["申悅官方更新站使用教學", "https://youtu.be/CDd5aAsGoe4"],
+      ["神盾操作使用教學 (照相更新）", "https://youtu.be/mG9Woba_46w"],
+      ["安卓機隨身碟播放音樂", "https://youtu.be/UGDWbypj7so"],
+      ["Play商店下載與更新APP", "https://youtu.be/sBAqvvv23rU"],
+      ["倒車顯影變成顛倒重新設定", "https://youtu.be/sL2oFKqVRNY"]
+    ]
+  }),
+  createTutorialGroup({
+    key: "mercedes",
+    title: "賓士／奔馳安卓機使用教學",
+    groupType: "車子品牌",
+    vehicleBrand: "賓士／奔馳",
+    unitProfile: "品牌專用安卓機",
+    items: [
+      ["賓士排解安卓機無聲音", "https://youtu.be/Y7bRiXd5TEs"],
+      ["賓士操作前行車記錄器教學", "https://youtu.be/ladSbQ5XL5w"],
+      ["賓士連接藍牙裝置教學", "https://youtu.be/ZIWG1w8qXMQ"],
+      ["賓士連接Apple CarPlay教學", "https://youtu.be/e_H23aED_Xw"],
+      ["賓士導航王使用教學", "https://youtu.be/lOmh6qXXMo8"]
+    ]
+  }),
+  createTutorialGroup({
+    key: "bmw",
+    title: "BMW／寶馬安卓機使用教學",
+    groupType: "車子品牌",
+    vehicleBrand: "BMW／寶馬",
+    unitProfile: "品牌專用安卓機",
+    items: [
+      ["寶馬iPhone手機連接藍牙教學", "https://youtu.be/l_nBlGJ_Qzc"],
+      ["寶馬iPhone手機分享網路教學", "https://youtu.be/7LLO2dkksN8"],
+      ["寶馬Apple Carplay 連接使用教學", "https://youtu.be/jd6gm09cSPc"],
+      ["寶馬 Android Auto連接使用教學", "https://youtu.be/kV_Hl7qtmC0"],
+      ["寶馬樂客導航王使用教學", "https://youtu.be/dA2JAS1Fw-M"],
+      ["寶馬神盾測速使用教學", "https://youtu.be/-gElT9ZzWj8"],
+      ["寶馬Andriod手機連接藍牙教學", "https://youtu.be/6JtUfQjrigI"],
+      ["寶馬Andriod 手機分享網路教學", "https://youtu.be/WeO64ykh4QM"],
+      ["寶馬安卓機電子儀表板教學", "https://youtu.be/5-V_SqO72rc"],
+      ["寶馬安卓機沒有聲音排解教學", "https://youtu.be/y7R_spqklv8"],
+      ["寶馬安卓機分屏模式教學", "https://youtu.be/sc2luW0fSAQ"]
+    ]
+  })
 ];
 
 const videos = [
-  { title: "新 UI 介面", category: "介面", url: "https://youtu.be/ir2H40ENsKY?si=B3FHIlE9rz7aLW7m" },
-  { title: surroundTutorialPlaylistTitle, category: "設定", url: surroundTutorialVideos[0].url, playlistKey: surroundTutorialPlaylistKey, playlistTitle: surroundTutorialPlaylistTitle, playlistItems: surroundTutorialVideos },
-  { title: "樂克導航（免開網路）", category: "導航", url: "https://youtu.be/k9laYNbPRVI?si=Btzhb4ISUNE-7e1A" },
-  { title: "iPhone 連接網路", category: "連線", url: "https://youtu.be/xJgQTR-GbN8" },
-  { title: "iPhone 連接藍芽", category: "連線", url: "https://youtu.be/fVOtS2oUsqY" },
-  { title: "Android Auto 使用", category: "連線", url: "https://youtu.be/TecO-20i3Pw" },
-  { title: "Apple CarPlay 使用", category: "連線", url: "https://youtu.be/JEAjZBDokhU" },
-  { title: "使用隨身碟聽音樂", category: "影音", url: "https://youtu.be/jHSQ7cxW7nw" },
-  { title: "電台存取", category: "影音", url: "https://youtu.be/Ra_2am4m5Ck" },
-  { title: "調整亮度", category: "設定", url: "https://youtu.be/ALDFaQSQJFA" },
-  { title: "神盾測速照相", category: "導航", url: "https://youtu.be/9O96HSQbNvc" },
-  { title: "尋找應用程式", category: "介面", url: "https://youtu.be/kTzVXGc-f5g" },
-  { title: "2024 申悅更新站", category: "設定", url: "https://youtu.be/pkBAlJrBwVE?si=REzKfead9FvQaNdD" },
-  { title: "分屏模式教學 - 安卓 13", category: "介面", url: "https://youtu.be/B2whM6w4VCI" },
-  { title: "分屏模式", category: "介面", url: "https://youtu.be/IbuzzVY6EVc" },
-  { title: "Google 語音搜尋", category: "導航", url: "https://youtu.be/DROmImKCRNg" },
-  { title: "安卓機桌布更換", category: "介面", url: "https://youtu.be/BcVmxELU4hU" },
-  { title: "iPhone 網路重置", category: "故障排除", url: "https://youtu.be/lNMnJmawFXk" },
-  { title: "觸控校正", category: "故障排除", url: "https://youtu.be/jvoYxWxzf90" },
-  { title: "APP 自動啟動", category: "設定", url: "https://youtu.be/aq6SUYLWJto" },
-  { title: "安卓機秒開模式", category: "設定", url: "https://youtu.be/P5jIoubuB7Y" },
-  { title: "螢幕亮度內建再次調整", category: "設定", url: "https://youtu.be/s3KGI2J_TB4" },
-  { title: "倒車顯影顛倒", category: "故障排除", url: "https://youtu.be/sL2oFKqVRNY" },
-  { title: "方向盤設定", category: "設定", url: "https://youtu.be/esI70gCzASU" },
-  { title: "主機當機重啟", category: "故障排除", url: "https://youtu.be/C9Qs85Un8lY?si=dE5VO4_fQ2lOxaR0" }
+  {
+    title: surroundTutorialPlaylistTitle,
+    category: "環景教學",
+    groupKey: "surround",
+    groupLabel: surroundTutorialPlaylistTitle,
+    vehicleBrand: "全部車種",
+    unitProfile: "環景系統",
+    url: surroundTutorialVideos[0].url,
+    playlistKey: surroundTutorialPlaylistKey,
+    playlistTitle: surroundTutorialPlaylistTitle,
+    playlistItems: surroundTutorialVideos
+  },
+  ...tutorialGroups
 ];
 
 function formatDate(value) {
@@ -2076,13 +2198,22 @@ function youtubePlaylistId(value) {
 function youtubeEmbedUrl(value) {
   const id = youtubeId(value);
   const playlistId = youtubePlaylistId(value);
+  const hasHttpsOrigin = location.protocol === "https:";
+  const playerOrigin = hasHttpsOrigin ? location.origin : "https://sylong7708.github.io";
+  const widgetReferrer = hasHttpsOrigin
+    ? location.href.split(/[?#]/)[0]
+    : "https://sylong7708.github.io/shen-yue-iphone-assistant/";
   const params = new URLSearchParams({
     autoplay: "1",
     rel: "0",
-    playsinline: "1"
+    playsinline: "1",
+    enablejsapi: "1",
+    origin: playerOrigin,
+    widget_referrer: widgetReferrer
   });
 
   if (playlistId) params.set("list", playlistId);
+  if (preferredTutorialQuality === "hd1080") params.set("vq", "hd1080");
   if (id) return `https://www.youtube.com/embed/${encodeURIComponent(id)}?${params.toString()}`;
   if (playlistId) return `https://www.youtube.com/embed/videoseries?${params.toString()}`;
   return "";
@@ -2162,21 +2293,22 @@ function normalizeText(value) {
 
 function getVideoSearchText(video = {}) {
   const playlistText = Array.isArray(video.playlistItems)
-    ? video.playlistItems.map((item) => `${item.title} ${item.category}`).join(" ")
+    ? video.playlistItems.map((item) => `${item.title} ${item.category} ${item.vehicleBrand || ""} ${item.unitProfile || ""}`).join(" ")
     : "";
-  return `${video.title} ${video.category} ${playlistText}`;
+  return `${video.title} ${video.category} ${video.groupLabel || ""} ${video.vehicleBrand || ""} ${video.unitProfile || ""} ${playlistText}`;
 }
 
 function renderVideos() {
   const query = normalizeText(videoSearch.value || "");
   const filtered = videos.filter((video) => {
-    const inCategory = activeVideoCategory === "all" || video.category === activeVideoCategory;
+    const inCategory = activeVideoCategory === "all" || video.groupKey === activeVideoCategory;
     const inQuery = normalizeText(getVideoSearchText(video)).includes(query);
     return inCategory && inQuery;
   });
 
   videoGrid.innerHTML = filtered.map((video) => {
     const originalIndex = videos.indexOf(video);
+    const playlistCount = getVideoPlaylistItems(video).length;
     return `
     <article class="video-card">
       <button class="video-thumb" type="button" data-video-open="${originalIndex}" aria-label="播放 ${escapeHtml(video.title)}">
@@ -2185,7 +2317,12 @@ function renderVideos() {
       </button>
       <div class="video-body">
         <h3>${escapeHtml(video.title)}</h3>
-        <p>${escapeHtml(video.category)}</p>
+        <div class="video-card-tags">
+          <span>${escapeHtml(video.category)}</span>
+          <span>${escapeHtml(video.vehicleBrand || "全部車種")}</span>
+          <span>${escapeHtml(video.unitProfile || "通用主機")}</span>
+        </div>
+        <p>${playlistCount} 支新版本教學</p>
         <button type="button" data-video-open="${originalIndex}">開啟教學</button>
       </div>
     </article>
@@ -2206,6 +2343,8 @@ function getVideoModal() {
             <p data-video-modal-meta></p>
           </div>
           <div class="video-modal-actions">
+            <button type="button" data-video-quality aria-pressed="false">畫質：自動</button>
+            <button type="button" data-video-shrink disabled>縮小</button>
             <button type="button" data-video-expand>放大</button>
             <button type="button" data-video-close>關閉</button>
           </div>
@@ -2303,15 +2442,18 @@ function openVideoPlayer(index, playlistIndex = null) {
     ? rootVideo.title || activeVideo.title || ""
     : activeVideo.title || "";
   meta.textContent = playlist.length
-    ? `${activeVideo.category || rootVideo.category || ""}｜${activeIndex + 1}/${playlist.length}`
-    : activeVideo.category || "";
+    ? `${rootVideo.vehicleBrand || "全部車種"}｜${rootVideo.unitProfile || "通用主機"}｜${activeVideo.category || rootVideo.category || ""}｜${activeIndex + 1}/${playlist.length}`
+    : `${rootVideo.vehicleBrand || "全部車種"}｜${rootVideo.unitProfile || "通用主機"}｜${activeVideo.category || ""}`;
   modal.dataset.videoRootIndex = String(index);
+  modal.dataset.videoPlaylistIndex = String(activeIndex);
 
   renderVideoFrame(player, activeVideo);
   renderVideoPlaylistPanel(modal, rootVideo, playlist, activeIndex);
+  syncTutorialQualityControl(modal, activeVideo);
 
   modal.hidden = false;
   document.body.classList.add("video-modal-open");
+  syncVideoSizeControls();
   if (wasHidden) modal.querySelector("[data-video-close]")?.focus({ preventScroll: true });
 }
 
@@ -2329,6 +2471,7 @@ function closeVideoPlayer() {
     playlistPanel.innerHTML = "";
   }
   delete modal.dataset.videoRootIndex;
+  delete modal.dataset.videoPlaylistIndex;
   document.body.classList.remove("video-modal-open");
 
   if (document.fullscreenElement) {
@@ -2350,10 +2493,54 @@ function toggleVideoExpand() {
     return;
   }
   if (shell.requestFullscreen) {
-    shell.requestFullscreen().catch(() => modal.classList.toggle("is-expanded"));
+    shell.requestFullscreen().catch(() => {
+      modal.classList.add("is-expanded");
+      syncVideoSizeControls();
+    });
     return;
   }
-  modal.classList.toggle("is-expanded");
+  modal.classList.add("is-expanded");
+  syncVideoSizeControls();
+}
+
+function shrinkVideoPlayer() {
+  const modal = document.querySelector("[data-video-modal]");
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
+  modal?.classList.remove("is-expanded");
+  syncVideoSizeControls();
+}
+
+function syncVideoSizeControls() {
+  const modal = document.querySelector("[data-video-modal]");
+  if (!modal) return;
+  const expanded = Boolean(document.fullscreenElement || modal.classList.contains("is-expanded"));
+  const expand = modal.querySelector("[data-video-expand]");
+  const shrink = modal.querySelector("[data-video-shrink]");
+  if (expand) expand.disabled = expanded;
+  if (shrink) shrink.disabled = !expanded;
+}
+
+function syncTutorialQualityControl(modal, video = {}) {
+  const button = modal?.querySelector("[data-video-quality]");
+  if (!button) return;
+  const supportsPreference = Boolean(youtubeId(video.url || video.embedUrl || video.videoUrl));
+  button.disabled = !supportsPreference;
+  button.textContent = supportsPreference
+    ? preferredTutorialQuality === "hd1080" ? "畫質：高畫質" : "畫質：自動"
+    : "畫質：原始";
+  button.setAttribute("aria-pressed", preferredTutorialQuality === "hd1080" ? "true" : "false");
+}
+
+function toggleTutorialQuality() {
+  const modal = document.querySelector("[data-video-modal]");
+  if (!modal) return;
+  preferredTutorialQuality = preferredTutorialQuality === "hd1080" ? "auto" : "hd1080";
+  localStorage.setItem("shen-yue-tutorial-quality", preferredTutorialQuality);
+  const rootIndex = Number(modal.dataset.videoRootIndex);
+  const playlistIndex = Number(modal.dataset.videoPlaylistIndex);
+  if (Number.isFinite(rootIndex)) openVideoPlayer(rootIndex, Number.isFinite(playlistIndex) ? playlistIndex : null);
 }
 
 function hasNativeUpdater() {
@@ -2888,6 +3075,20 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const videoShrink = event.target.closest("[data-video-shrink]");
+  if (videoShrink) {
+    event.preventDefault();
+    shrinkVideoPlayer();
+    return;
+  }
+
+  const videoQuality = event.target.closest("[data-video-quality]");
+  if (videoQuality) {
+    event.preventDefault();
+    toggleTutorialQuality();
+    return;
+  }
+
   if (event.target.matches("[data-video-modal]")) {
     closeVideoPlayer();
     return;
@@ -2908,6 +3109,8 @@ document.addEventListener("keydown", (event) => {
     closeVideoPlayer();
   }
 });
+
+document.addEventListener("fullscreenchange", syncVideoSizeControls);
 
 videoSearch.addEventListener("input", renderVideos);
 
@@ -3023,7 +3226,7 @@ installButton.addEventListener("click", async () => {
   installButton.hidden = true;
 });
 
-if ("serviceWorker" in navigator) {
+if ("serviceWorker" in navigator && location.hostname !== "appassets.androidplatform.net") {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("service-worker.js");
   });
