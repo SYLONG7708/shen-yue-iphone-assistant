@@ -1,41 +1,41 @@
 {
   "schema": 1,
   "channel": "stable",
-  "updatedAt": "2026-07-10T21:44:52+08:00",
+  "updatedAt": "2026-08-19T18:43:51+08:00",
   "apps": [
     {
       "id": "tw.com.sylong.tvcar-7",
       "name": "影視",
       "category": "影音播放",
       "packageName": "tw.com.sylong.tvcar",
-      "versionCode": 7,
-      "versionName": "1.1.3-machine8-fullscreen",
-      "minAndroid": "Android SDK 23",
-      "targetSdk": "28",
-      "sizeLabel": "274 KB",
+      "versionCode": 17,
+      "versionName": "1.4.7-cloud-license",
+      "minAndroid": "Android SDK 21",
+      "targetSdk": "35",
+      "sizeLabel": "1.1 MB",
       "apkUrl": "https://github.com/SYLONG7708/update/releases/download/apk-cloud/tw.com.sylong.tvcar-7.apk",
-      "sha256": "e4c3aa6e438752167cee9834944305824e394aa15f18859354756ca0c5134ce8",
+      "sha256": "00de89936e96b253bce40bc0881eb38d8abfbd9cfb2f87ea1e80a20a64c26872",
       "imageUrl": "assets/update-splash.png",
       "iconUrl": "assets/update-icons/tw.com.sylong.tvcar-7-icon.png",
       "galleryImages": [],
       "description": "影視播放 APK，提供車機影音播放使用。",
       "changelog": [
-        "已加入申悅車機更新中心",
-        "可在車機內下載安裝",
-        "新增影視 APK"
+        "已於 2026-08-19T18:43:51+08:00 由永久雲端上傳頁替換 APK",
+        "版本：1.4.7-cloud-license (17)",
+        "可在車機內下載安裝"
       ]
     },
     {
-      "id": "tw.com.shenyue.assistant-136",
+      "id": "tw.com.shenyue.assistant-110",
       "name": "申悅車機助手",
       "packageName": "tw.com.shenyue.assistant",
-      "versionCode": 136,
-      "versionName": "1.0.36-car-legacy-cloud",
-      "minAndroid": "Android SDK 23",
-      "targetSdk": "28",
+      "versionCode": 110,
+      "versionName": "1.0.10-live",
+      "minAndroid": "依 APK 設定",
+      "targetSdk": "36",
       "sizeLabel": "2.5 MB",
-      "apkUrl": "https://raw.githubusercontent.com/SYLONG7708/shen-yue-iphone-assistant/main/releases/1.0.36-evergreen-cloud-native-core/ShenYueAssistant-1.0.36-evergreen-cloud-native-core-car-legacy-cloud-release-debug-signed.apk",
-      "sha256": "dc2965bd243087dc881538f9ac95cb7c79abfc5e83e16ac96640495291c7cc81",
+      "apkUrl": "https://github.com/SYLONG7708/update/releases/download/apk-cloud/tw.com.shenyue.assistant-110.apk",
+      "sha256": "ada86dc494bbd77d740645c7832b08e2621ce8e045a7f54aef673aca09aac0c0",
       "imageUrl": "https://sylong7708.github.io/shen-yue-iphone-assistant/assets/update-gallery/tw.com.shenyue.assistant-110-photo-1.png",
       "iconUrl": "https://sylong7708.github.io/shen-yue-iphone-assistant/assets/update-icons/tw.com.shenyue.assistant-110-icon.png",
       "galleryImages": [
@@ -43,14 +43,11 @@
         "https://sylong7708.github.io/shen-yue-iphone-assistant/assets/update-gallery/tw.com.shenyue.assistant-110-photo-2.png"
       ],
       "category": "申悅助手",
-      "description": "申悅車機助手 1.0.36 常青雲端原生核心：USB1／USB2／USB3 深層完整掃描與實體檔案去重，QR 下載只有在完整位元數驗證通過後才顯示 100%，並以真正影片檔案分享到 LINE；日後一般介面、掃描規則、格式、逾時與分享目標可由 GitHub 即時更新。",
+      "description": "申悅車機助手即時更新版，修正更新中心上傳驗證與雲端清單同步，App 名稱顯示為申悅車機助手。",
       "changelog": [
-        "新增安全的常青原生橋接 v2 與 GitHub native-config：一般掃描／下載／分享規則往後不需重裝 APK",
-        "完整掃描 USB1／USB2／USB3、動態可移除磁碟與 MediaStore，支援最多 100,000 部影片及 28 種常見環景格式",
-        "以磁碟 inode 去除大小寫掛載別名及 MediaStore 重複項目，深層影片不漏讀也不重複",
-        "Android 接收端支援持久續傳、完整大小驗證、保持螢幕喚醒及最後有效設定離線備援",
-        "LINE／Messenger／Facebook／微信及系統分享收到的是 content:// 完整影片檔案，不是網址",
-        "WebView 授權碼不送上網、限制可信 GitHub Pages 路徑，且動態設定採固定快取鍵避免累積垃圾"
+        "已加入申悅車機更新中心",
+        "可在車機內下載安裝",
+        "修正上傳成功驗證與雲端清單同步"
       ]
     },
     {
